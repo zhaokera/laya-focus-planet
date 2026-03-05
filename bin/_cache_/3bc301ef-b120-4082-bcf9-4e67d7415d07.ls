@@ -1,0 +1,13 @@
+{
+  "_$ver": 1,
+  "_$id": "ql1g236t",
+  "_$runtime": "res://84f89060-d701-4411-b5dc-ae6e4a05aed0",
+  "_$type": "Scene",
+  "left": 0,
+  "right": 0,
+  "top": 0,
+  "bottom": 0,
+  "name": "Scene2D",
+  "width": 1334,
+  "height": 750
+}

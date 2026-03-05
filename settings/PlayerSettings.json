@@ -1,0 +1,19 @@
+{
+  "resolution": {
+    "designWidth": 1179,
+    "designHeight": 2556
+  },
+  "modules": {
+    "laya.ui": true,
+    "laya.d3": false
+  },
+  "addons": {
+    "laya.ui": "ui2"
+  },
+  "splash": {
+    "fit": "center"
+  },
+  "stat": true,
+  "vConsole": true,
+  "alertGlobalError": true
+}
