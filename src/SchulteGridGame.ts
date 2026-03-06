@@ -154,7 +154,7 @@ export class SchulteGridGame extends Laya.Script {
         this._currentNumber = 1;
         this._totalNumbers = this._currentSize * this._currentSize;
         this._errors = 0;
-        this._startTime = Laya.timer.now();
+        this._startTime = Laya.timer.currTimer;
         this._isPlaying = true;
         this.updateTargetDisplay();
         this.updateErrorDisplay();
@@ -251,7 +251,7 @@ export class SchulteGridGame extends Laya.Script {
 
     private updateTimeDisplay(): void {
         if (this.timeSprite) {
-            const elapsed = Laya.timer.now() - this._startTime;
+            const elapsed = Laya.timer.currTimer - this._startTime;
             const timeStr = this.formatTime(elapsed);
             this.timeSprite.graphics.clear();
             this.timeSprite.graphics.fillText("用时: " + timeStr, 0, 28, "28px SimHei", "#FFD700");
@@ -267,7 +267,7 @@ export class SchulteGridGame extends Laya.Script {
 
     private onGameCompleted(): void {
         this._isPlaying = false;
-        const elapsed = Laya.timer.now() - this._startTime;
+        const elapsed = Laya.timer.currTimer - this._startTime;
         this.showResultPanel(elapsed, this._errors);
     }
 

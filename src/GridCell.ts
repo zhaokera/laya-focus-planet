@@ -1,17 +1,14 @@
-const { Event } = Laya;
-
 /**
  * 舒尔特方格格子组件
- * 显示单个数字，处理点击事件和状态显示
  */
 export class GridCell extends Laya.Sprite {
-    private static CELL_SIZE: number = 70;
-    private static FONT_SIZE: number = 32;
-
     private _number: number = 0;
     private _expected: number = 0;
     private _isLocked: boolean = false;
-    private _highlightTimer: number = 0;
+    private _cellSize: number = 86;
+    private _state: "idle" | "correct" | "error" = "idle";
+
+    private readonly numberLabel: Laya.Text = new Laya.Text();
 
     constructor(number: number, expected: number) {
         super();
@@ -20,114 +17,97 @@ export class GridCell extends Laya.Sprite {
         this.initCell();
     }
 
-    // 初始化格子
     private initCell(): void {
-        this.drawNormalState();
-
-        // 绑定点击事件
-        this.on(Event.TOUCH_START, this, this.onTouchStart);
-        this.on(Event.MOUSE_DOWN, this, this.onMouseDown);
+        this.mouseEnabled = true;
+        this.addChild(this.numberLabel);
+        this.numberLabel.align = "center";
+        this.numberLabel.valign = "middle";
+        this.numberLabel.bold = true;
+        this.numberLabel.font = "Microsoft YaHei";
+        this.refreshVisual();
     }
 
-    // 绘制正常状态（待点击）
-    private drawNormalState(): void {
-        this.graphics.clear();
-
-        // 绘制边框
-        this.graphics.drawRect(0, 0, GridCell.CELL_SIZE, GridCell.CELL_SIZE, "#FFFFFF");
-
-        // 绘制数字（居中）
-        this.drawNumber(this._number);
+    public setCellSize(size: number): void {
+        this._cellSize = Math.max(56, Math.floor(size));
+        this.size(this._cellSize, this._cellSize);
+        this.refreshVisual();
     }
 
-    // 绘制已完成状态（置灰）
+    public playPressFeedback(): void {
+        if (this._isLocked) {
+            return;
+        }
+        Laya.Tween.clearAll(this);
+        this.scale(1, 1);
+        Laya.Tween.to(this, { scaleX: 0.96, scaleY: 0.96 }, 70, null, Laya.Handler.create(this, () => {
+            Laya.Tween.to(this, { scaleX: 1, scaleY: 1 }, 90);
+        }));
+    }
+
     public markCompleted(): void {
         this._isLocked = true;
-        this.graphics.clear();
-
-        // 绘制灰色边框
-        this.graphics.drawRect(0, 0, GridCell.CELL_SIZE, GridCell.CELL_SIZE, "#555555");
-
-        // 绘制灰色数字
-        this.drawNumber(this._number, "#AAAAAA");
+        this._state = "correct";
+        this.refreshVisual();
     }
 
-    // 绘制错误闪烁状态
     public showError(): Promise<void> {
-        return new Promise<void>(resolve => {
+        return new Promise<void>((resolve) => {
             if (this._isLocked) {
                 resolve();
                 return;
             }
-
-            let flashCount = 0;
-            const maxFlashes = 6; // 3次闪红（亮->暗->亮->暗->亮->暗）
-
-            const flash = () => {
-                const isWhite = flashCount % 2 === 0;
-                this.graphics.clear();
-
-                // 错误时红色，平时灰色
-                this.graphics.drawRect(0, 0, GridCell.CELL_SIZE, GridCell.CELL_SIZE,
-                    isWhite ? "#E74C3C" : "#555555");
-                this.drawNumber(this._number, isWhite ? "#FFFFFF" : "#AAAAAA");
-
-                flashCount++;
-                if (flashCount >= maxFlashes) {
-                    // 恢复到已锁定状态
-                    this.graphics.clear();
-                    this.graphics.drawRect(0, 0, GridCell.CELL_SIZE, GridCell.CELL_SIZE, "#555555");
-                    this.drawNumber(this._number, "#AAAAAA");
-                    this._isLocked = true;
+            this._state = "error";
+            this.refreshVisual();
+            Laya.Tween.clearAll(this);
+            this.scale(1, 1);
+            Laya.Tween.to(this, { scaleX: 1.02, scaleY: 1.02 }, 80, null, Laya.Handler.create(this, () => {
+                Laya.Tween.to(this, { scaleX: 1, scaleY: 1 }, 100, null, Laya.Handler.create(this, () => {
+                    this._state = "idle";
+                    this.refreshVisual();
                     resolve();
-                } else {
-                    // 继续闪烁
-                    Laya.timer.once(100, this, flash);
-                }
-            };
-
-            flash();
+                }));
+            }));
         });
     }
 
-    // 绘制数字（居中）
-    private drawNumber(num: number, color: string = "#FFFFFF"): void {
-        const text = num.toString();
-        const fontSize = 32;
-        // 简单估算居中位置
-        const textWidth = text.length * fontSize * 0.6;
-        const x = (GridCell.CELL_SIZE - textWidth) / 2;
-        const y = fontSize + 8;
-
-        this.graphics.fillText(text, x, y, fontSize + "px SimHei-bold", color);
-    }
-
-    // 重置格子
     public reset(number: number, expected: number): void {
         this._number = number;
         this._expected = expected;
         this._isLocked = false;
-        this.drawNormalState();
+        this._state = "idle";
+        this.refreshVisual();
     }
 
-    // 点击事件处理
-    private onTouchStart(): void {
-        this.onTriggerClick();
+    private refreshVisual(): void {
+        const size = this._cellSize;
+        this.graphics.clear();
+
+        if (this._state === "correct") {
+            this.graphics.drawRoundRect(0, 0, size, size, 12, "#153A33", "#45F4AE", 3);
+            this.graphics.drawRoundRect(5, 5, size - 10, size - 10, 10, "#1F5448", null, 0);
+            this.setLabelStyle("#A6FFE0");
+        } else if (this._state === "error") {
+            this.graphics.drawRoundRect(0, 0, size, size, 12, "#421527", "#FF6C97", 3);
+            this.graphics.drawRoundRect(5, 5, size - 10, size - 10, 10, "#5B1B34", null, 0);
+            this.setLabelStyle("#FFD0DC");
+        } else {
+            this.graphics.drawRoundRect(0, 0, size, size, 12, "#122344", "#54D5FF", 2);
+            this.graphics.drawRoundRect(5, 5, size - 10, size - 10, 10, "#1A2F57", null, 0);
+            this.setLabelStyle("#A5EFFF");
+        }
+
+        this.numberLabel.text = this._number.toString();
+        this.numberLabel.fontSize = Math.max(24, Math.floor(size * 0.36));
+        this.numberLabel.width = size;
+        this.numberLabel.height = size;
+        this.numberLabel.x = 0;
+        this.numberLabel.y = 0;
     }
 
-    private onMouseDown(): void {
-        this.onTriggerClick();
+    private setLabelStyle(color: string): void {
+        this.numberLabel.color = color;
     }
 
-    private onTriggerClick(): void {
-        if (this._isLocked) return;
-
-        // 派发事件给父容器处理
-        this.owner && this.owner.dispatchEvent(new Event("cellClick", true));
-        (this.owner as any).currentCell = this;
-    }
-
-    // 获取格子信息
     public getNumber(): number { return this._number; }
     public isLocked(): boolean { return this._isLocked; }
     public getExpectedNumber(): number { return this._expected; }

@@ -53,11 +53,13 @@ export class ResultPanel extends Laya.Sprite {
         restartBtn.y = 220;
         this.addChild(restartBtn);
         restartBtn.on(Event.TOUCH_START, this, this.onRestart);
+        restartBtn.on(Event.MOUSE_DOWN, this, this.onRestart);
         // 返回按钮
         const backBtn = this.createButton("返回", 200, 40, "#95A5A6", "#FFFFFF", 24);
         backBtn.y = 220;
         this.addChild(backBtn);
         backBtn.on(Event.TOUCH_START, this, this.onBack);
+        backBtn.on(Event.MOUSE_DOWN, this, this.onBack);
     }
     // 创建按钮
     createButton(text, width, height, color, textColor, fontSize) {

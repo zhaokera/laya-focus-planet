@@ -5,6 +5,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 const { regClass, Event } = Laya;
+import { GameScene } from "./GameScene";
 let Main = class Main extends Laya.Scene {
     constructor() {
         super(...arguments);
@@ -134,22 +135,24 @@ let Main = class Main extends Laya.Scene {
                 wrap.scale(1, 1);
                 wrap.alpha = 1;
             };
-            wrap.on(Event.TOUCH_START, this, () => {
+            const onTap = () => {
                 console.log("[Home] click:", d.label);
                 wrap.scale(0.97, 0.97);
                 wrap.alpha = 0.92;
                 this.timer.frameOnce(3, this, onRelease);
                 if (d.action === "start") {
-                    this.currentDifficulty = 3;
+                    this.currentDifficulty = 5;
                     this.timer.frameOnce(4, this, this.startGame);
                 }
                 else if (d.action === "challenge") {
-                    this.currentDifficulty = 5;
-                }
-                else if (d.action === "rank") {
                     this.currentDifficulty = 4;
                 }
-            });
+                else if (d.action === "rank") {
+                    this.currentDifficulty = 3;
+                }
+            };
+            wrap.on(Event.TOUCH_START, this, onTap);
+            wrap.on(Event.MOUSE_DOWN, this, onTap);
         });
     }
     createAssetImage(parent, key, x, y, w, h) {
@@ -212,11 +215,11 @@ let Main = class Main extends Laya.Scene {
         return t;
     }
     startGame() {
-        Laya.Scene.load("scenes/Game.scene", this, (scene) => {
-            Laya.stage.addChild(scene);
-            scene["currentDifficulty"] = this.currentDifficulty;
-            this.destroy();
-        });
+        const scene = new GameScene();
+        scene.name = "GameScene";
+        scene.setDifficulty(this.currentDifficulty);
+        Laya.stage.addChild(scene);
+        this.destroy();
     }
     onDestroy() {
         this.timer.clear(this, this.updateHomeFx);

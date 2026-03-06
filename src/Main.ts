@@ -1,4 +1,5 @@
 const { regClass, Event } = Laya;
+import { GameScene } from "./GameScene";
 
 @regClass("84f89060-d701-4411-b5dc-ae6e4a05aed0", "../src/Main.ts")
 export class Main extends Laya.Scene {
@@ -158,21 +159,24 @@ export class Main extends Laya.Scene {
                 wrap.alpha = 1;
             };
 
-            wrap.on(Event.TOUCH_START, this, () => {
+            const onTap = () => {
                 console.log("[Home] click:", d.label);
                 wrap.scale(0.97, 0.97);
                 wrap.alpha = 0.92;
                 this.timer.frameOnce(3, this, onRelease);
 
                 if (d.action === "start") {
-                    this.currentDifficulty = 3;
+                    this.currentDifficulty = 5;
                     this.timer.frameOnce(4, this, this.startGame);
                 } else if (d.action === "challenge") {
-                    this.currentDifficulty = 5;
-                } else if (d.action === "rank") {
                     this.currentDifficulty = 4;
+                } else if (d.action === "rank") {
+                    this.currentDifficulty = 3;
                 }
-            });
+            };
+
+            wrap.on(Event.TOUCH_START, this, onTap);
+            wrap.on(Event.MOUSE_DOWN, this, onTap);
         });
     }
 
@@ -266,11 +270,11 @@ export class Main extends Laya.Scene {
     }
 
     private startGame(): void {
-        Laya.Scene.load("scenes/Game.scene", this, (scene: Laya.Scene) => {
-            Laya.stage.addChild(scene);
-            scene["currentDifficulty"] = this.currentDifficulty;
-            this.destroy();
-        });
+        const scene = new GameScene();
+        scene.name = "GameScene";
+        scene.setDifficulty(this.currentDifficulty);
+        Laya.stage.addChild(scene);
+        this.destroy();
     }
 
     onDestroy(): void {
