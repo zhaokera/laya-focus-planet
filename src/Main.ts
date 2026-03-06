@@ -1,5 +1,4 @@
 const { regClass, Event } = Laya;
-import { GameScene } from "./GameScene";
 import { SchulteGridGame } from "./SchulteGridGame";
 
 @regClass("84f89060-d701-4411-b5dc-ae6e4a05aed0", "../src/Main.ts")
