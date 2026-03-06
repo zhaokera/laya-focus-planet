@@ -272,10 +272,9 @@ export class Main extends Laya.Scene {
 
     private startGame(): void {
         // 使用新的 SchulteGridGame 场景
-        const scene = new Laya.Sprite();
+        const scene = new SchulteGridGame();
         scene.name = "GameScene";
-        scene.addComponent(SchulteGridGame);
-        (scene.getComponent(SchulteGridGame) as any).currentDifficulty = this.currentDifficulty;
+        scene.currentDifficulty = this.currentDifficulty;
         Laya.stage.addChild(scene);
         this.destroy();
     }

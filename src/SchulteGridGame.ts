@@ -1,4 +1,4 @@
-const { Event } = Laya;
+const { regClass, Event } = Laya;
 
 import { GridCell } from "./GridCell";
 
@@ -6,7 +6,10 @@ import { GridCell } from "./GridCell";
  * 舒尔特方格专注力训练游戏主控制脚本
  * 星空紫蓝主题 - 100%还原设计稿
  */
-export class SchulteGridGame extends Laya.Script {
+@regClass("schulte_grid_game", "../src/SchulteGridGame.ts")
+export class SchulteGridGame extends Laya.Scene {
+    public currentDifficulty: number = 4;  // 接收Main传递的难度
+
     // 网格尺寸配置
     private GRID_SIZES: { [key: number]: { rows: number; cols: number } } = {
         3: { rows: 3, cols: 3 },
@@ -52,14 +55,18 @@ export class SchulteGridGame extends Laya.Script {
     private cells: GridCell[] = [];
     private _timerRunning: boolean = false;
 
-    onStart(): void {
+    onAwake(): void {
         // 使用Main传递的难度
         if (this.currentDifficulty >= 3 && this.currentDifficulty <= 5) {
             this._currentSize = this.currentDifficulty;
             this._totalNumbers = this._currentSize * this._currentSize;
         }
 
-        this.gridContainer = this.owner as Laya.Sprite;
+        // 设置场景大小
+        this.size(Laya.stage.width, Laya.stage.height);
+
+        // Scene 本身就是容器
+        this.gridContainer = this;
 
         this.bgLayer = new Laya.Sprite();
         this.gridContainer.addChild(this.bgLayer);
@@ -279,13 +286,13 @@ export class SchulteGridGame extends Laya.Script {
     private createActionButtons(): void {
         const w = Laya.stage.width;
 
-        // 设计稿按钮：200x54
+        // 设计稿按钮：200x54, bottom: 80px
         this.startBtn = this.createMainButton("开始游戏", 200, 54);
-        this.startBtn.pos((w - 200) / 2, Laya.stage.height - 120);
+        this.startBtn.pos((w - 200) / 2, Laya.stage.height - 134);
         this.startBtn.on(Event.TOUCH_START, this, this.onStartGame);
         this.uiContainer.addChild(this.startBtn);
 
-        // 提示按钮 - 设计稿位置
+        // 提示按钮 - 设计稿位置 right:20px, top:185px
         this.hintBtn = this.createSmallButton("提示: 关", 80, 34);
         this.hintBtn.pos(w - 100, 185);
         this.hintBtn.on(Event.TOUCH_START, this, this.onToggleHint);
@@ -380,10 +387,10 @@ export class SchulteGridGame extends Laya.Script {
         gameLayerNew.name = "gameLayer";
         this.gridContainer.addChild(gameLayerNew);
 
-        // 设计稿：320x320面板
+        // 设计稿：320x320面板, top: 245px
         const panelSize = 320;
         const panelX = (Laya.stage.width - panelSize) / 2;
-        const panelY = 240;
+        const panelY = 245;
 
         // 面板阴影
         const shadow = new Laya.Sprite();
