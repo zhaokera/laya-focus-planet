@@ -19,6 +19,7 @@ export class SchulteGridGame extends Laya.Script {
     private static PANEL_SIZE: number = 320;  // 设计稿是320x320
 
     // 游戏状态
+    public currentDifficulty: number = 4;  // 接收Main传递的难度
     private _currentSize: number = 4;  // 默认4x4
     private _currentNumber: number = 1;
     private _totalNumbers: number = 16;
@@ -52,6 +53,12 @@ export class SchulteGridGame extends Laya.Script {
     private _timerRunning: boolean = false;
 
     onStart(): void {
+        // 使用Main传递的难度
+        if (this.currentDifficulty >= 3 && this.currentDifficulty <= 5) {
+            this._currentSize = this.currentDifficulty;
+            this._totalNumbers = this._currentSize * this._currentSize;
+        }
+
         this.gridContainer = this.owner as Laya.Sprite;
 
         this.bgLayer = new Laya.Sprite();
