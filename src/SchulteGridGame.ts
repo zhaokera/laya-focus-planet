@@ -4,7 +4,7 @@ import { GridCell } from "./GridCell";
 
 /**
  * 舒尔特方格专注力训练游戏主控制脚本
- * 星空紫蓝主题游戏界面
+ * 星空紫蓝主题 - 100%还原设计稿
  */
 export class SchulteGridGame extends Laya.Script {
     // 网格尺寸配置
@@ -14,18 +14,18 @@ export class SchulteGridGame extends Laya.Script {
         5: { rows: 5, cols: 5 }
     };
 
-    private static CELL_SPACING: number = 12;
-    private static CELL_SIZE: number = 72;
+    // 设计稿尺寸
+    private static CELL_SPACING: number = 6;  // 设计稿是6px
+    private static PANEL_SIZE: number = 320;  // 设计稿是320x320
 
     // 游戏状态
-    private _currentSize: number = 3;
+    private _currentSize: number = 4;  // 默认4x4
     private _currentNumber: number = 1;
-    private _totalNumbers: number = 9;
+    private _totalNumbers: number = 16;
     private _startTime: number = 0;
     private _errors: number = 0;
     private _isPlaying: boolean = false;
     private _showHints: boolean = false;
-    private _lastFrameTime: number = 0;
 
     // 容器
     private bgLayer: Laya.Sprite = null;
@@ -48,11 +48,7 @@ export class SchulteGridGame extends Laya.Script {
     // 装饰
     private titleText: Laya.Text = null;
     private gridPanel: Laya.Sprite = null;
-
-    // 格子
     private cells: GridCell[] = [];
-
-    // 动画状态
     private _timerRunning: boolean = false;
 
     onStart(): void {
@@ -81,104 +77,93 @@ export class SchulteGridGame extends Laya.Script {
         const w = Laya.stage.width;
         const h = Laya.stage.height;
 
-        // 渐变背景 - 星空紫蓝
+        // 设计稿背景：深色渐变
         this.bgLayer.graphics.drawRect(0, 0, w, h, "#0D0B1E");
-        this.drawGradientBg();
 
-        // 添加星星粒子效果
-        this.createStars();
-    }
+        // 顶部紫光
+        const topGlow = new Laya.Sprite();
+        topGlow.graphics.drawCircle(w/2, -100, 400, "rgba(139, 92, 246, 0.25)");
+        this.bgLayer.addChild(topGlow);
 
-    private drawGradientBg(): void {
-        const w = Laya.stage.width;
-        const h = Laya.stage.height;
-
-        // 创建星空渐变背景
-        const gradient = new Laya.Graphics();
-        gradient.drawRect(0, 0, w, h, "#0D0B1E");
-        this.bgLayer.addChild(gradient);
+        // 底部蓝光
+        const bottomGlow = new Laya.Sprite();
+        bottomGlow.graphics.drawCircle(w/2, h + 100, 350, "rgba(59, 130, 246, 0.2)");
+        this.bgLayer.addChild(bottomGlow);
 
         // 叠加渐变层
         const overlay = new Laya.Sprite();
         overlay.graphics.drawRect(0, 0, w, h, "rgba(88, 28, 135, 0.15)");
         this.bgLayer.addChild(overlay);
 
-        // 顶部紫光
-        const topGlow = new Laya.Sprite();
-        topGlow.graphics.drawCircle(w/2, -100, 400, "rgba(139, 92, 246, 0.2)");
-        this.bgLayer.addChild(topGlow);
-
-        // 底部蓝光
-        const bottomGlow = new Laya.Sprite();
-        bottomGlow.graphics.drawCircle(w/2, h + 100, 350, "rgba(59, 130, 246, 0.15)");
-        this.bgLayer.addChild(bottomGlow);
+        // 添加星星
+        this.createStars();
     }
 
     private createStars(): void {
-        const starCount = 30;
-        for (let i = 0; i < starCount; i++) {
+        const starPositions = [
+            { x: 0.08, y: 0.15 }, { x: 0.25, y: 0.08 }, { x: 0.70, y: 0.20 },
+            { x: 0.85, y: 0.12 }, { x: 0.15, y: 0.25 }, { x: 0.55, y: 0.18 },
+            { x: 0.90, y: 0.30 }, { x: 0.05, y: 0.35 }, { x: 0.45, y: 0.05 },
+            { x: 0.35, y: 0.22 }
+        ];
+
+        starPositions.forEach((pos, i) => {
             const star = new Laya.Sprite();
-            const size = 1 + Math.random() * 2;
-            const x = Math.random() * Laya.stage.width;
-            const y = Math.random() * Laya.stage.height;
-            const alpha = 0.3 + Math.random() * 0.7;
-
-            star.graphics.drawCircle(0, 0, size, `rgba(255, 255, 255, ${alpha})`);
-            star.pos(x, y);
+            const size = i % 2 === 0 ? 2 : 1.5;
+            star.graphics.drawCircle(0, 0, size, "rgba(255, 255, 255, 0.7)");
+            star.pos(pos.x * Laya.stage.width, pos.y * Laya.stage.height);
             this.bgLayer.addChild(star);
-
-            // 闪烁动画
-            this.animateStar(star, alpha);
-        }
+            this.animateStar(star, 0.7, i * 0.2);
+        });
     }
 
-    private animateStar(star: Laya.Sprite, baseAlpha: number): void {
-        const duration = 1000 + Math.random() * 2000;
-        Laya.Tween.to(star, { alpha: baseAlpha * 0.3 }, duration, Laya.Ease.sineInOut,
-            Laya.Handler.create(this, () => {
-                Laya.Tween.to(star, { alpha: baseAlpha }, duration, Laya.Ease.sineInOut,
-                    Laya.Handler.create(this, () => this.animateStar(star, baseAlpha)));
-            }));
+    private animateStar(star: Laya.Sprite, baseAlpha: number, delay: number): void {
+        Laya.timer.once(delay * 1000, this, () => {
+            const loop = () => {
+                const duration = 1500 + Math.random() * 1500;
+                Laya.Tween.to(star, { alpha: baseAlpha * 0.3 }, duration, Laya.Ease.sineInOut,
+                    Laya.Handler.create(this, () => {
+                        Laya.Tween.to(star, { alpha: baseAlpha }, duration, Laya.Ease.sineInOut,
+                            Laya.Handler.create(this, loop)));
+                    }));
+            };
+            loop();
+        });
     }
 
     private createTitle(): void {
         this.titleText = new Laya.Text();
         this.titleText.text = "舒尔特方格";
-        this.titleText.fontSize = 36;
+        this.titleText.fontSize = 24;
         this.titleText.font = "Microsoft YaHei";
         this.titleText.bold = true;
         this.titleText.color = "#F8F3CF";
         this.titleText.stroke = 3;
-        this.titleText.strokeColor = "#4A351A";
+        this.titleText.strokeColor = "rgba(0, 0, 0, 0.5)";
         this.titleText.align = "center";
         this.uiContainer.addChild(this.titleText);
     }
 
     private createHudPanel(): void {
         const w = Laya.stage.width;
-        const panelW = Math.min(w * 0.92, 400);
-        const panelH = 100;
+        const panelW = 340;  // 设计稿尺寸
+        const panelH = 90;   // 设计稿尺寸
+        const panelY = 75;   // 设计稿位置
 
         this.hudPanel = new Laya.Sprite();
-        this.hudPanel.pos((w - panelW) / 2, 90);
+        this.hudPanel.pos((w - panelW) / 2, panelY);
         this.hudPanel.size(panelW, panelH);
 
-        // 玻璃拟态背景
-        this.hudPanel.graphics.drawRoundRect(0, 0, panelW, panelH, 16, "rgba(255, 255, 255, 0.08)", "rgba(255, 255, 255, 0.12)", 2);
-
+        // 设计稿：玻璃拟态背景
+        this.hudPanel.graphics.drawRoundRect(0, 0, panelW, panelH, 16, "rgba(255, 255, 255, 0.06)", "rgba(255, 255, 255, 0.12)", 2);
         // 内发光
         this.hudPanel.graphics.drawRoundRect(4, 4, panelW - 8, panelH - 8, 14, null, "rgba(139, 92, 246, 0.15)", 1);
 
         this.uiContainer.addChild(this.hudPanel);
 
-        // 信息项
-        const itemW = panelW / 3;
-
-        // 目标数字
+        // 目标/用时/错误
         this.createHudItem("目标", "1", "#FFD700", 0);
-        // 计时器
         this.createHudItem("用时", "00:00", "#4FC3F7", 1);
-        // 错误次数
         this.createHudItem("错误", "0", "#FF6B6B", 2);
     }
 
@@ -187,36 +172,29 @@ export class SchulteGridGame extends Laya.Script {
         const itemW = panelW / 3;
         const x = index * itemW;
 
-        // 图标背景
-        const iconBg = new Laya.Sprite();
-        iconBg.graphics.drawCircle(30, 30, 20, `rgba(255, 255, 255, 0.1)`);
-        iconBg.pos(x + 10, 15);
-        this.hudPanel.addChild(iconBg);
-
-        // 标签文字
+        // 标签
         const labelText = new Laya.Text();
         labelText.text = label;
-        labelText.fontSize = 14;
+        labelText.fontSize = 12;
         labelText.color = "rgba(255, 255, 255, 0.6)";
         labelText.font = "Microsoft YaHei";
-        labelText.pos(x + itemW / 2, 12);
+        labelText.pos(x + itemW / 2, 14);
         labelText.align = "center";
         this.hudPanel.addChild(labelText);
 
-        // 数值文字
+        // 数值
         const valueText = new Laya.Text();
         valueText.text = value;
-        valueText.fontSize = 28;
+        valueText.fontSize = 26;
         valueText.font = "Microsoft YaHei";
         valueText.bold = true;
         valueText.color = color;
         valueText.stroke = 2;
         valueText.strokeColor = "rgba(0, 0, 0, 0.3)";
-        valueText.pos(x + itemW / 2, 32);
+        valueText.pos(x + itemW / 2, 34);
         valueText.align = "center";
         this.hudPanel.addChild(valueText);
 
-        // 根据索引保存引用
         if (label === "目标") this.targetText = valueText;
         else if (label === "用时") this.timerText = valueText;
         else if (label === "错误") this.errorText = valueText;
@@ -225,15 +203,15 @@ export class SchulteGridGame extends Laya.Script {
     private createDifficultyButtons(): void {
         const w = Laya.stage.width;
         const btns = [3, 4, 5];
-        const btnW = 70;
-        const btnH = 40;
-        const spacing = 20;
+        const btnW = 65;   // 设计稿尺寸
+        const btnH = 38;   // 设计稿尺寸
+        const spacing = 16;
         const totalW = btns.length * btnW + (btns.length - 1) * spacing;
         let xOffset = (w - totalW) / 2;
 
         btns.forEach(size => {
-            const btn = this.createStyledButton(size + "x" + size, btnW, btnH, size === this._currentSize);
-            btn.pos(xOffset, 210);
+            const btn = this.createStyledButton(size + "×" + size, btnW, btnH, size === this._currentSize);
+            btn.pos(xOffset, 185);  // 设计稿位置
             btn.name = "diff_" + size;
             (btn as any).userData = { gridSize: size };
             btn.on(Event.TOUCH_START, this, () => { this.selectDifficulty(size); });
@@ -247,16 +225,18 @@ export class SchulteGridGame extends Laya.Script {
         const btn = new Laya.Sprite();
         btn.size(w, h);
 
-        // 按钮背景
-        const bgColor = selected ? "#8B5CF6" : "rgba(255, 255, 255, 0.08)";
-        const borderColor = selected ? "#A78BFA" : "rgba(255, 255, 255, 0.2)";
+        // 设计稿按钮样式
+        if (selected) {
+            // 选中：渐变紫色
+            btn.graphics.drawRoundRect(0, 0, w, h, 8, "#8B5CF6", "#6D28D9", 2);
+        } else {
+            // 未选中：半透明
+            btn.graphics.drawRoundRect(0, 0, w, h, 8, "rgba(255, 255, 255, 0.08)", "rgba(255, 255, 255, 0.2)", 2);
+        }
 
-        btn.graphics.drawRoundRect(0, 0, w, h, 8, bgColor, borderColor, 2);
-
-        // 文字
         const textNode = new Laya.Text();
         textNode.text = text;
-        textNode.fontSize = 16;
+        textNode.fontSize = 14;
         textNode.font = "Microsoft YaHei";
         textNode.bold = true;
         textNode.color = "#FFFFFF";
@@ -271,17 +251,18 @@ export class SchulteGridGame extends Laya.Script {
     }
 
     private selectDifficulty(size: number): void {
-        // 更新按钮状态
         Object.keys(this.difficultyBtns).forEach(key => {
             const btn = this.difficultyBtns[parseInt(key)];
             const isSelected = parseInt(key) === size;
             const w = btn.width;
             const h = btn.height;
-            const bgColor = isSelected ? "#8B5CF6" : "rgba(255, 255, 255, 0.08)";
-            const borderColor = isSelected ? "#A78BFA" : "rgba(255, 255, 255, 0.2)";
-
             btn.graphics.clear();
-            btn.graphics.drawRoundRect(0, 0, w, h, 8, bgColor, borderColor, 2);
+
+            if (isSelected) {
+                btn.graphics.drawRoundRect(0, 0, w, h, 8, "#8B5CF6", "#6D28D9", 2);
+            } else {
+                btn.graphics.drawRoundRect(0, 0, w, h, 8, "rgba(255, 255, 255, 0.08)", "rgba(255, 255, 255, 0.2)", 2);
+            }
         });
 
         this._currentSize = size;
@@ -291,22 +272,15 @@ export class SchulteGridGame extends Laya.Script {
     private createActionButtons(): void {
         const w = Laya.stage.width;
 
-        // 开始按钮
-        this.startBtn = this.createMainButton("开始游戏", 180, 56);
-        this.startBtn.pos((w - 180) / 2, 280);
+        // 设计稿按钮：200x54
+        this.startBtn = this.createMainButton("开始游戏", 200, 54);
+        this.startBtn.pos((w - 200) / 2, Laya.stage.height - 120);
         this.startBtn.on(Event.TOUCH_START, this, this.onStartGame);
         this.uiContainer.addChild(this.startBtn);
 
-        // 重置按钮
-        this.resetBtn = this.createMainButton("重置", 100, 48);
-        this.resetBtn.pos((w - 100) / 2 + 50, 285);
-        this.resetBtn.visible = false;
-        this.resetBtn.on(Event.TOUCH_START, this, this.onResetGame);
-        this.uiContainer.addChild(this.resetBtn);
-
-        // 提示按钮
-        this.hintBtn = this.createSmallButton("提示: 关", 90, 36);
-        this.hintBtn.pos(w - 110, 210);
+        // 提示按钮 - 设计稿位置
+        this.hintBtn = this.createSmallButton("提示: 关", 80, 34);
+        this.hintBtn.pos(w - 100, 185);
         this.hintBtn.on(Event.TOUCH_START, this, this.onToggleHint);
         this.uiContainer.addChild(this.hintBtn);
     }
@@ -316,16 +290,14 @@ export class SchulteGridGame extends Laya.Script {
         btn.size(w, h);
         btn.mouseEnabled = true;
 
-        // 渐变背景
+        // 设计稿：渐变紫色，圆角27px
         btn.graphics.drawRoundRect(0, 0, w, h, h/2, "#8B5CF6", "#6D28D9", 2);
-
-        // 高光效果
+        // 高光
         btn.graphics.drawRoundRect(4, 4, w - 8, h/2 - 4, h/4, "rgba(255, 255, 255, 0.15)", null, 0);
 
-        // 文字
         const textNode = new Laya.Text();
         textNode.text = text;
-        textNode.fontSize = 22;
+        textNode.fontSize = 20;
         textNode.font = "Microsoft YaHei";
         textNode.bold = true;
         textNode.color = "#FFFFFF";
@@ -337,9 +309,6 @@ export class SchulteGridGame extends Laya.Script {
         textNode.height = h;
         btn.addChild(textNode);
 
-        // 阴影
-        btn.graphics.drawRect(0, h - 4, w, 4, "rgba(0, 0, 0, 0.3)");
-
         return btn;
     }
 
@@ -348,11 +317,11 @@ export class SchulteGridGame extends Laya.Script {
         btn.size(w, h);
         btn.mouseEnabled = true;
 
-        btn.graphics.drawRoundRect(0, 0, w, h, h/2, "rgba(255, 255, 255, 0.1)", "rgba(255, 255, 255, 0.2)", 1);
+        btn.graphics.drawRoundRect(0, 0, w, h, h/2, "rgba(255, 255, 255, 0.08)", "rgba(255, 255, 255, 0.2)", 1);
 
         const textNode = new Laya.Text();
         textNode.text = text;
-        textNode.fontSize = 14;
+        textNode.fontSize = 12;
         textNode.font = "Microsoft YaHei";
         textNode.color = "#FFFFFF";
         textNode.align = "center";
@@ -366,23 +335,9 @@ export class SchulteGridGame extends Laya.Script {
 
     private layoutUI(): void {
         const w = Laya.stage.width;
-
         if (this.titleText) {
-            this.titleText.pos(w / 2, 35);
+            this.titleText.pos(w / 2, 30);
         }
-
-        // 居中困难选择按钮
-        const btns = [3, 4, 5];
-        const btnW = 70;
-        const spacing = 20;
-        const totalW = btns.length * btnW + (btns.length - 1) * spacing;
-        let xOffset = (w - totalW) / 2;
-        btns.forEach(size => {
-            if (this.difficultyBtns[size]) {
-                this.difficultyBtns[size].x = xOffset;
-                xOffset += btnW + spacing;
-            }
-        });
     }
 
     private onStartGame(): void {
@@ -398,10 +353,9 @@ export class SchulteGridGame extends Laya.Script {
         this.updateTargetDisplay();
         this.updateErrorDisplay();
 
-        // 隐藏难度按钮，显示重置按钮
+        // 隐藏元素
         Object.values(this.difficultyBtns).forEach(btn => { btn.visible = false; });
         if (this.startBtn) this.startBtn.visible = false;
-        if (this.resetBtn) this.resetBtn.visible = true;
         if (this.hintBtn) this.hintBtn.visible = false;
         if (this.titleText) this.titleText.visible = false;
 
@@ -409,51 +363,48 @@ export class SchulteGridGame extends Laya.Script {
     }
 
     private createGrid(): void {
-        // 清理旧格子
         this.cells.forEach(cell => { cell.off(Event.TOUCH_START, this, null); cell.destroy(); });
         this.cells = [];
-        if (this.gridContainer) {
-            // 保留背景层，清理游戏层
-            const gameLayer = this.gridContainer.getChildByName("gameLayer") as Laya.Sprite;
-            if (gameLayer) gameLayer.destroy();
-        }
 
-        // 创建游戏层
-        const gameLayer = new Laya.Sprite();
-        gameLayer.name = "gameLayer";
-        this.gridContainer.addChild(gameLayer);
+        const gameLayer = this.gridContainer.getChildByName("gameLayer") as Laya.Sprite;
+        if (gameLayer) gameLayer.destroy();
 
-        // 创建面板背景
-        const panelSize = Math.min(Laya.stage.width * 0.85, 400);
+        const gameLayerNew = new Laya.Sprite();
+        gameLayerNew.name = "gameLayer";
+        this.gridContainer.addChild(gameLayerNew);
+
+        // 设计稿：320x320面板
+        const panelSize = 320;
         const panelX = (Laya.stage.width - panelSize) / 2;
-        const panelY = 270;
+        const panelY = 240;
 
         // 面板阴影
         const shadow = new Laya.Sprite();
         shadow.graphics.drawRoundRect(panelX + 6, panelY + 6, panelSize, panelSize, 24, "rgba(0, 0, 0, 0.4)");
-        gameLayer.addChild(shadow);
+        gameLayerNew.addChild(shadow);
 
-        // 面板背景
+        // 面板背景 - 设计稿颜色
         const panel = new Laya.Sprite();
         panel.graphics.drawRoundRect(panelX, panelY, panelSize, panelSize, 24, "#1E1B4B", "#312E81", 3);
-        gameLayer.addChild(panel);
+        gameLayerNew.addChild(panel);
 
-        // 面板内发光边框
+        // 面板内发光
         const innerGlow = new Laya.Sprite();
         innerGlow.graphics.drawRoundRect(panelX + 6, panelY + 6, panelSize - 12, panelSize - 12, 20, null, "rgba(139, 92, 246, 0.25)", 1);
-        gameLayer.addChild(innerGlow);
+        gameLayerNew.addChild(innerGlow);
 
         // 装饰角标
         this.createPanelDecorations(panelX, panelY, panelSize);
 
         const { rows, cols } = this.GRID_SIZES[this._currentSize];
-        const spacing = SchulteGridGame.CELL_SPACING;
-        const cellSize = Math.floor((panelSize - 48 - spacing * (cols - 1)) / cols);
+        const spacing = SchulteGridGame.CELL_SPACING;  // 6px
+        const padding = 16;
+        const cellSize = Math.floor((panelSize - padding * 2 - spacing * (cols - 1)) / cols);
 
         const gridW = cols * cellSize + (cols - 1) * spacing;
         const gridH = rows * cellSize + (rows - 1) * spacing;
-        const startX = panelX + (panelSize - gridW) / 2;
-        const startY = panelY + (panelSize - gridH) / 2;
+        const startX = panelX + padding + (panelSize - padding * 2 - gridW) / 2;
+        const startY = panelY + padding + (panelSize - padding * 2 - gridH) / 2;
 
         const numbers = this.generateNumbers(this._totalNumbers);
         const shuffled = this.fisherYatesShuffle(numbers);
@@ -467,56 +418,43 @@ export class SchulteGridGame extends Laya.Script {
                 cell.x = startX + col * (cellSize + spacing);
                 cell.y = startY + row * (cellSize + spacing);
                 cell.on(Event.TOUCH_START, this, (e: Event) => { this.onCellClick(cell); });
-                gameLayer.addChild(cell);
+                gameLayerNew.addChild(cell);
                 this.cells.push(cell);
             }
         }
+
+        // 设置当前目标高亮
+        this.updateActiveCell();
     }
 
     private createPanelDecorations(x: number, y: number, size: number): void {
         const gameLayer = this.gridContainer.getChildByName("gameLayer") as Laya.Sprite;
         if (!gameLayer) return;
 
-        const cornerSize = 30;
+        const cornerSize = 24;
         const cornerColor = "rgba(139, 92, 246, 0.6)";
 
-        // 左上角
+        // 左上
         const tl = new Laya.Sprite();
-        tl.graphics.drawPath(0, 0, [
-            ["moveTo", 0, cornerSize],
-            ["lineTo", 0, 0],
-            ["lineTo", cornerSize, 0]
-        ], null, cornerColor);
+        tl.graphics.drawPath(0, 0, [["moveTo", 0, cornerSize], ["lineTo", 0, 0], ["lineTo", cornerSize, 0]], null, cornerColor);
         tl.pos(x + 8, y + 8);
         gameLayer.addChild(tl);
 
-        // 右上角
+        // 右上
         const tr = new Laya.Sprite();
-        tr.graphics.drawPath(0, 0, [
-            ["moveTo", 0, 0],
-            ["lineTo", cornerSize, 0],
-            ["lineTo", cornerSize, cornerSize]
-        ], null, cornerColor);
+        tr.graphics.drawPath(0, 0, [["moveTo", 0, 0], ["lineTo", cornerSize, 0], ["lineTo", cornerSize, cornerSize]], null, cornerColor);
         tr.pos(x + size - 8 - cornerSize, y + 8);
         gameLayer.addChild(tr);
 
-        // 左下角
+        // 左下
         const bl = new Laya.Sprite();
-        bl.graphics.drawPath(0, 0, [
-            ["moveTo", 0, 0],
-            ["lineTo", 0, cornerSize],
-            ["lineTo", cornerSize, cornerSize]
-        ], null, cornerColor);
+        bl.graphics.drawPath(0, 0, [["moveTo", 0, 0], ["lineTo", 0, cornerSize], ["lineTo", cornerSize, cornerSize]], null, cornerColor);
         bl.pos(x + 8, y + size - 8 - cornerSize);
         gameLayer.addChild(bl);
 
-        // 右下角
+        // 右下
         const br = new Laya.Sprite();
-        br.graphics.drawPath(0, 0, [
-            ["moveTo", cornerSize, 0],
-            ["lineTo", cornerSize, cornerSize],
-            ["lineTo", 0, cornerSize]
-        ], null, cornerColor);
+        br.graphics.drawPath(0, 0, [["moveTo", cornerSize, 0], ["lineTo", cornerSize, cornerSize], ["lineTo", 0, cornerSize]], null, cornerColor);
         br.pos(x + size - 8 - cornerSize, y + size - 8 - cornerSize);
         gameLayer.addChild(br);
     }
@@ -534,6 +472,17 @@ export class SchulteGridGame extends Laya.Script {
             [result[i], result[j]] = [result[j], result[i]];
         }
         return result;
+    }
+
+    private updateActiveCell(): void {
+        // 清除之前的active状态
+        this.cells.forEach(cell => cell.setHighlight(false));
+
+        // 设置当前目标高亮
+        const activeCell = this.cells.find(c => c.getNumber() === this._currentNumber);
+        if (activeCell) {
+            activeCell.setHighlight(true);
+        }
     }
 
     private onCellClick(cell: GridCell): void {
@@ -556,6 +505,7 @@ export class SchulteGridGame extends Laya.Script {
             this.onGameCompleted();
         } else {
             this.updateTargetDisplay();
+            this.updateActiveCell();
         }
     }
 
@@ -568,7 +518,6 @@ export class SchulteGridGame extends Laya.Script {
     }
 
     private playCorrectEffect(cell: GridCell): void {
-        // 创建光晕效果
         const glow = new Laya.Sprite();
         const size = cell.width + 30;
         glow.graphics.drawCircle(size/2, size/2, size/2, "rgba(139, 92, 246, 0.4)");
@@ -584,7 +533,6 @@ export class SchulteGridGame extends Laya.Script {
     }
 
     private playErrorEffect(): void {
-        // 震动效果
         if (this.gridContainer) {
             const originalX = this.gridContainer.x;
             Laya.Tween.to(this.gridContainer, { x: originalX - 8 }, 50, null,
@@ -602,7 +550,7 @@ export class SchulteGridGame extends Laya.Script {
 
     private updateTargetDisplay(): void {
         if (this.targetText) {
-            this.targetText.text = this._currentNumber + " / " + this._totalNumbers;
+            this.targetText.text = this._currentNumber + "";
         }
     }
 
@@ -614,19 +562,15 @@ export class SchulteGridGame extends Laya.Script {
 
     private updateTimer(): void {
         if (!this._isPlaying || !this._timerRunning) return;
-
         const elapsed = Laya.timer.currTimer - this._startTime;
         const timeStr = this.formatTime(elapsed);
-        if (this.timerText) {
-            this.timerText.text = timeStr;
-        }
+        if (this.timerText) this.timerText.text = timeStr;
     }
 
     private formatTime(ms: number): string {
         const minutes = Math.floor(ms / 60000);
         const seconds = Math.floor((ms % 60000) / 1000);
-        const secs = seconds.toString().padStart(2, "0");
-        return minutes + ":" + secs;
+        return minutes.toString().padStart(2, "0") + ":" + seconds.toString().padStart(2, "0");
     }
 
     private onGameCompleted(): void {
@@ -638,18 +582,13 @@ export class SchulteGridGame extends Laya.Script {
     }
 
     private playCompletionEffect(): void {
-        // 烟花效果
+        const colors = ["#FFD700", "#FF6B6B", "#4FC3F7", "#A78BFA", "#4ADE80"];
         for (let i = 0; i < 15; i++) {
             const particle = new Laya.Sprite();
             const size = 8 + Math.random() * 8;
-            const colors = ["#FFD700", "#FF6B6B", "#4FC3F7", "#A78BFA", "#4ADE80"];
-            const color = colors[Math.floor(Math.random() * colors.length)];
-            particle.graphics.drawCircle(size/2, size/2, size/2, color);
+            particle.graphics.drawCircle(size/2, size/2, size/2, colors[i % colors.length]);
             particle.size(size, size);
-            particle.pos(
-                Math.random() * Laya.stage.width,
-                Laya.stage.height * 0.3 + Math.random() * 100
-            );
+            particle.pos(Math.random() * Laya.stage.width, Laya.stage.height * 0.3 + Math.random() * 100);
             this.fxContainer.addChild(particle);
 
             Laya.Tween.to(particle, {
@@ -663,60 +602,55 @@ export class SchulteGridGame extends Laya.Script {
 
     private showCompletePopup(timeMs: number): void {
         const w = Laya.stage.width;
-        const popupW = Math.min(w * 0.78, 320);
-        const popupH = 220;
+        const popupW = 280;
+        const popupH = 200;
         const popupX = (w - popupW) / 2;
         const popupY = (Laya.stage.height - popupH) / 2;
 
-        // 遮罩
         const overlay = new Laya.Sprite();
-        overlay.graphics.drawRect(0, 0, Laya.stage.width, Laya.stage.height, "rgba(0, 0, 0, 0.6)");
+        overlay.graphics.drawRect(0, 0, Laya.stage.width, Laya.stage.height, "rgba(0, 0, 0, 0.65)");
         overlay.on(Event.TOUCH_START, this, () => {});
         this.fxContainer.addChild(overlay);
 
-        // 面板
         const panel = new Laya.Sprite();
         panel.pos(popupX, popupY);
         panel.graphics.drawRoundRect(0, 0, popupW, popupH, 20, "#1E1B4B", "#4C1D95", 3);
         this.fxContainer.addChild(panel);
 
-        // 标题
         const title = new Laya.Text();
         title.text = "🎉 挑战完成!";
-        title.fontSize = 32;
+        title.fontSize = 28;
         title.font = "Microsoft YaHei";
         title.bold = true;
         title.color = "#FFD700";
         title.stroke = 2;
         title.strokeColor = "rgba(0, 0, 0, 0.3)";
         title.align = "center";
-        title.pos(popupW / 2, 30);
+        title.pos(popupW / 2, 24);
         panel.addChild(title);
 
-        // 结果
         const elapsedSec = Math.floor(timeMs / 1000);
         const resultText = new Laya.Text();
         resultText.text = `用时: ${elapsedSec}秒\n错误: ${this._errors}次`;
-        resultText.fontSize = 20;
+        resultText.fontSize = 16;
         resultText.font = "Microsoft YaHei";
         resultText.color = "#E0E7FF";
         resultText.align = "center";
-        resultText.leading = 10;
-        resultText.pos(popupW / 2, 90);
+        resultText.leading = 8;
+        resultText.pos(popupW / 2, 75);
         panel.addChild(resultText);
 
-        // 按钮
         const btnW = 140;
-        const btnH = 48;
+        const btnH = 44;
         const btn = new Laya.Sprite();
-        btn.pos((popupW - btnW) / 2, 155);
-        btn.graphics.drawRoundRect(0, 0, btnW, btnH, 24, "#8B5CF6", "#6D28D9", 2);
+        btn.pos((popupW - btnW) / 2, 140);
+        btn.graphics.drawRoundRect(0, 0, btnW, btnH, 22, "#8B5CF6", "#6D28D9", 2);
         btn.mouseEnabled = true;
         panel.addChild(btn);
 
         const btnText = new Laya.Text();
         btnText.text = "再来一局";
-        btnText.fontSize = 18;
+        btnText.fontSize = 16;
         btnText.font = "Microsoft YaHei";
         btnText.bold = true;
         btnText.color = "#FFFFFF";
@@ -733,7 +667,6 @@ export class SchulteGridGame extends Laya.Script {
         this.clearPopup();
         Object.values(this.difficultyBtns).forEach(btn => { btn.visible = true; });
         if (this.startBtn) this.startBtn.visible = true;
-        if (this.resetBtn) this.resetBtn.visible = false;
         if (this.hintBtn) this.hintBtn.visible = true;
         if (this.titleText) this.titleText.visible = true;
         this.onResetGame();
@@ -750,13 +683,11 @@ export class SchulteGridGame extends Laya.Script {
         this._errors = 0;
         this._startTime = 0;
 
-        // 清理游戏层
         const gameLayer = this.gridContainer.getChildByName("gameLayer") as Laya.Sprite;
         if (gameLayer) gameLayer.destroy();
-
         this.cells = [];
 
-        if (this.targetText) this.targetText.text = "1 / " + this._totalNumbers;
+        if (this.targetText) this.targetText.text = "1";
         if (this.timerText) this.timerText.text = "00:00";
         if (this.errorText) this.errorText.text = "0";
     }
@@ -782,7 +713,6 @@ export class SchulteGridGame extends Laya.Script {
         textNode.align = "center";
         textNode.pos(w / 2, Laya.stage.height / 2);
         this.fxContainer.addChild(textNode);
-
         Laya.timer.once(duration, this, () => { textNode.destroy(); });
     }
 
