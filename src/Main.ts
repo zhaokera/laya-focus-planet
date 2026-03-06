@@ -1,5 +1,6 @@
 const { regClass, Event } = Laya;
 import { GameScene } from "./GameScene";
+import { SchulteGridGame } from "./SchulteGridGame";
 
 @regClass("84f89060-d701-4411-b5dc-ae6e4a05aed0", "../src/Main.ts")
 export class Main extends Laya.Scene {
@@ -270,9 +271,11 @@ export class Main extends Laya.Scene {
     }
 
     private startGame(): void {
-        const scene = new GameScene();
+        // 使用新的 SchulteGridGame 场景
+        const scene = new Laya.Sprite();
         scene.name = "GameScene";
-        scene.setDifficulty(this.currentDifficulty);
+        scene.addComponent(SchulteGridGame);
+        (scene.getComponent(SchulteGridGame) as any).currentDifficulty = this.currentDifficulty;
         Laya.stage.addChild(scene);
         this.destroy();
     }
