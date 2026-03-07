@@ -1,6 +1,7 @@
 const { regClass, Event } = Laya;
 import { GameScene } from "./GameScene";
 import { LeaderboardPanel } from "./LeaderboardPanel";
+import { ChallengeSelectPanel } from "./ChallengeSelectPanel";
 
 @regClass("84f89060-d701-4411-b5dc-ae6e4a05aed0", "../src/Main.ts")
 export class Main extends Laya.Scene {
@@ -173,7 +174,7 @@ export class Main extends Laya.Scene {
                     this.currentDifficulty = 5;
                     this.startGame();
                 } else if (d.action === "challenge") {
-                    this.currentDifficulty = 4;
+                    this.showChallengeSelect();
                 } else if (d.action === "rank") {
                     this.showLeaderboard();
                 } else if (d.action === "settings") {
@@ -276,6 +277,14 @@ export class Main extends Laya.Scene {
         // 使用场景跳转方式打开排行榜
         const panel = new LeaderboardPanel();
         panel.name = "LeaderboardPanel";
+        Laya.stage.addChild(panel);
+        this.destroy();
+    }
+
+    private showChallengeSelect(): void {
+        // 打开挑战模式选择面板
+        const panel = new ChallengeSelectPanel();
+        panel.name = "ChallengeSelectPanel";
         Laya.stage.addChild(panel);
         this.destroy();
     }
