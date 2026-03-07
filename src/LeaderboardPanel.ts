@@ -22,7 +22,9 @@ export class LeaderboardPanel extends Laya.Scene {
     private readonly BASE_H: number = 750;
 
     private readonly COLORS = {
-        bg: "rgba(26,26,46,0.95)",
+        bg: "#0F0F1A",
+        bgGradientStart: "#0F0F1A",
+        bgGradientEnd: "#1A1A2E",
         panelBg: "rgba(255,255,255,0.05)",
         title: "#FFD700",
         gold: "#FFD700",
@@ -39,12 +41,14 @@ export class LeaderboardPanel extends Laya.Scene {
 
     private root: Laya.Sprite = null;
     private stageBg: Laya.Sprite = null;
+    private starsContainer: Laya.Sprite = null;
     private bgLayer: Laya.Sprite = null;
     private panelContainer: Laya.Sprite = null;
     private contentLayer: Laya.Sprite = null;
     private tabContainer: Laya.Sprite = null;
     private listContainer: Laya.Sprite = null;
     private listMask: Laya.Sprite = null;
+    private stars: Laya.Sprite[] = [];
 
     private currentTab: number = 0; // 0:总榜, 1:周榜, 2:月榜
     private tabBtns: Laya.Sprite[] = [];
@@ -74,6 +78,11 @@ export class LeaderboardPanel extends Laya.Scene {
         this.addChild(this.stageBg);
         this.refreshStageBg();
 
+        // 星星背景层
+        this.starsContainer = new Laya.Sprite();
+        this.addChild(this.starsContainer);
+        this.createStars();
+
         // 缩放容器
         this.root = new Laya.Sprite();
         this.addChild(this.root);
@@ -90,13 +99,86 @@ export class LeaderboardPanel extends Laya.Scene {
         this.root.size(this.BASE_W, this.BASE_H);
     }
 
+    /**
+     * 创建星星闪烁背景
+     */
+    private createStars(): void {
+        // 根据屏幕大小生成星星数量
+        const sw = Math.max(1, Laya.stage.width);
+        const sh = Math.max(1, Laya.stage.height);
+        const starCount = Math.floor((sw * sh) / 8000); // 约 60-80 颗星星
+
+        for (let i = 0; i < starCount; i++) {
+            const star = new Laya.Sprite();
+            const x = Math.random() * sw;
+            const y = Math.random() * sh;
+            const size = 1 + Math.random() * 2; // 1-3px
+            const alpha = 0.3 + Math.random() * 0.7;
+
+            // 绘制星星
+            star.graphics.drawCircle(0, 0, size, `rgba(255,255,255,${alpha})`);
+            star.pos(x, y);
+            star.alpha = 0.3 + Math.random() * 0.4;
+
+            this.starsContainer.addChild(star);
+            this.stars.push(star);
+
+            // 闪烁动画 - 随机延迟启动
+            const delay = Math.random() * 3000;
+            const duration = 2000 + Math.random() * 1000;
+            this.startStarTwinkle(star, delay, duration);
+        }
+    }
+
+    /**
+     * 启动星星闪烁动画
+     */
+    private startStarTwinkle(star: Laya.Sprite, delay: number, duration: number): void {
+        Laya.timer.once(delay, this, () => {
+            if (star.destroyed) return;
+            this.twinkleStar(star, duration);
+        });
+    }
+
+    /**
+     * 星星闪烁动画循环
+     */
+    private twinkleStar(star: Laya.Sprite, duration: number): void {
+        if (star.destroyed) return;
+
+        const targetAlpha = star.alpha > 0.5 ? 0.2 + Math.random() * 0.3 : 0.6 + Math.random() * 0.4;
+        Laya.Tween.to(star, { alpha: targetAlpha }, duration, null, Laya.Handler.create(this, () => {
+            if (!star.destroyed) {
+                this.twinkleStar(star, duration);
+            }
+        }));
+    }
+
     private refreshStageBg(): void {
         if (!this.stageBg) return;
         const sw = Math.max(1, Laya.stage.width);
         const sh = Math.max(1, Laya.stage.height);
 
         this.stageBg.graphics.clear();
-        this.stageBg.graphics.drawRect(0, 0, sw, sh, "#1A1A2E");
+        // 绘制深空渐变背景
+        const gradient = this.stageBg.graphics;
+        // 使用多段矩形模拟渐变效果（LayaAir 不直接支持渐变填充）
+        const steps = 10;
+        for (let i = 0; i < steps; i++) {
+            const ratio = i / steps;
+            const nextRatio = (i + 1) / steps;
+            const y1 = sh * ratio;
+            const y2 = sh * nextRatio;
+            const h = y2 - y1;
+
+            // 从深到浅的深紫色渐变
+            const r = Math.floor(15 + ratio * 10);
+            const g = Math.floor(15 + ratio * 10);
+            const b = Math.floor(26 + ratio * 20);
+            const color = `rgb(${r},${g},${b})`;
+
+            gradient.drawRect(0, y1, sw, h + 1, color);
+        }
     }
 
     private onResize(): void {
@@ -109,15 +191,15 @@ export class LeaderboardPanel extends Laya.Scene {
     }
 
     private initPanel(): void {
-        // 面板参数
+        // 面板参数 - 调整为更紧凑的布局
         const panelW = 340;
-        const panelH = 580;
+        const panelH = 560;
         const panelX = (this.BASE_W - panelW) * 0.5;
-        const panelY = 50;
+        const panelY = 60;
 
         // 半透明遮罩背景
         this.bgLayer = new Laya.Sprite();
-        this.bgLayer.graphics.drawRect(0, 0, this.BASE_W, this.BASE_H, "rgba(0,0,0,0.6)");
+        this.bgLayer.graphics.drawRect(0, 0, this.BASE_W, this.BASE_H, "rgba(0,0,0,0.3)");
         this.bgLayer.alpha = 0;
         this.root.addChild(this.bgLayer);
 
@@ -219,8 +301,8 @@ export class LeaderboardPanel extends Laya.Scene {
 
     private createTabs(): void {
         const tabs = ["总榜", "周榜", "月榜"];
-        const tabWidth = 70;
-        const tabHeight = 32;
+        const tabWidth = 72;
+        const tabHeight = 36;
         const gap = 12;
         const panelW = 340;
         const startX = (panelW - (tabs.length * tabWidth + (tabs.length - 1) * gap)) / 2;
@@ -263,17 +345,27 @@ export class LeaderboardPanel extends Laya.Scene {
         g.clear();
 
         if (active) {
-            // 激活状态 - 金色背景 + 边框
-            g.drawRoundRect(0, 0, tab.width, tab.height, 16,
-                "rgba(255,215,0,0.2)",
-                "rgba(255,215,0,0.5)",
-                1
-            );
+            // 激活状态 - 金色渐变背景（用多段矩形模拟）
+            const steps = 8;
+            for (let i = 0; i < steps; i++) {
+                const ratio = i / steps;
+                const nextRatio = (i + 1) / steps;
+                const x1 = tab.width * ratio;
+                const x2 = tab.width * nextRatio;
+                const w = x2 - x1;
+
+                // 金色渐变：从深金色到亮金色
+                const alpha = 0.15 + ratio * 0.15;
+                const color = `rgba(255,${Math.floor(200 + ratio * 15)},0,${alpha})`;
+                g.drawRect(x1, 0, w + 1, tab.height, color);
+            }
+            // 边框
+            g.drawRoundRect(0, 0, tab.width, tab.height, 18, null, "rgba(255,215,0,0.6)", 1.5);
         } else {
             // 非激活状态 - 半透明背景 + 边框
-            g.drawRoundRect(0, 0, tab.width, tab.height, 16,
+            g.drawRoundRect(0, 0, tab.width, tab.height, 18,
                 "rgba(255,255,255,0.05)",
-                "rgba(255,255,255,0.1)",
+                "rgba(255,255,255,0.12)",
                 1
             );
         }
@@ -300,10 +392,10 @@ export class LeaderboardPanel extends Laya.Scene {
 
     private createScrollList(): void {
         const listW = 320;
-        const listH = 370;
+        const listH = 360;
         const panelW = 340;
         const listX = (panelW - listW) * 0.5;
-        const listY = 125;
+        const listY = 130;
 
         // 使用普通 Sprite 替代 Panel
         this.listMask = new Laya.Sprite();
@@ -358,9 +450,9 @@ export class LeaderboardPanel extends Laya.Scene {
         this.listContainer.y = 0;
 
         const records = this.getRankData();
-        const itemH = 58;
+        const itemH = 52; // 更紧凑的项高度
         const listW = 320;
-        const listH = 370;
+        const listH = 360;
 
         if (records.length === 0) {
             this.showEmptyState();
@@ -372,10 +464,12 @@ export class LeaderboardPanel extends Laya.Scene {
             const item = this.createRankItem(record, index, listW, itemH);
             item.pos(0, index * itemH);
             item.alpha = 0;
+            // 初始位置向下偏移，用于上滑动画
+            item.y = index * itemH + 20;
             this.listContainer.addChild(item);
 
-            // 依次淡入动画
-            Laya.Tween.to(item, { alpha: 1 }, 300, null, null, index * 80);
+            // 依次淡入 + 上滑动画
+            Laya.Tween.to(item, { alpha: 1, y: index * itemH }, 400, Laya.Ease.easeOut, null, index * 50);
         });
 
         const totalHeight = records.length * itemH;
@@ -395,23 +489,39 @@ export class LeaderboardPanel extends Laya.Scene {
         g.clear();
 
         if (isTop3) {
+            // 前三名 - 渐变背景（用多段矩形模拟）
             const bgColor = rankType === "gold"
-                ? "rgba(255,215,0,0.12)"
+                ? { r: 255, g: 215, b: 0 }
                 : rankType === "silver"
-                    ? "rgba(192,192,192,0.12)"
-                    : "rgba(205,127,50,0.12)";
+                    ? { r: 192, g: 192, b: 192 }
+                    : { r: 205, g: 127, b: 50 };
 
             const borderColor = rankType === "gold"
-                ? "rgba(255,215,0,0.3)"
+                ? "rgba(255,215,0,0.4)"
                 : rankType === "silver"
-                    ? "rgba(192,192,192,0.3)"
-                    : "rgba(205,127,50,0.3)";
+                    ? "rgba(192,192,192,0.4)"
+                    : "rgba(205,127,50,0.4)";
 
-            // 使用原生 drawRoundRect 绘制背景+边框
-            g.drawRoundRect(0, 0, w, h, 12, bgColor, borderColor, 1);
+            // 绘制渐变背景
+            const steps = 6;
+            for (let i = 0; i < steps; i++) {
+                const ratio = i / steps;
+                const nextRatio = (i + 1) / steps;
+                const x1 = w * ratio;
+                const x2 = w * nextRatio;
+                const stepW = x2 - x1;
+
+                const alpha = 0.08 + ratio * 0.08;
+                const color = `rgba(${bgColor.r},${bgColor.g},${bgColor.b},${alpha})`;
+                g.drawRect(x1, 0, stepW + 1, h, color);
+            }
+
+            // 边框（带发光效果 - 画两层）
+            g.drawRoundRect(0, 0, w, h, 10, null, `rgba(${bgColor.r},${bgColor.g},${bgColor.b},0.15)`, 3);
+            g.drawRoundRect(0, 0, w, h, 10, null, borderColor, 1);
         } else {
-            // 普通项 - 略带背景
-            g.drawRoundRect(0, 0, w, h, 12, "rgba(255,255,255,0.03)", "rgba(255,255,255,0.05)", 1);
+            // 普通项 - 更紧凑的背景
+            g.drawRoundRect(0, 0, w, h, 10, "rgba(255,255,255,0.02)", "rgba(255,255,255,0.04)", 1);
         }
 
         // 排名徽章
@@ -426,8 +536,23 @@ export class LeaderboardPanel extends Laya.Scene {
                     ? this.COLORS.silver
                     : this.COLORS.bronze;
 
-            // 徽章背景 - 圆形
+            // 外发光效果 - 画一圈半透明的光晕
+            const glowColor = rankType === "gold"
+                ? "rgba(255,215,0,0.25)"
+                : rankType === "silver"
+                    ? "rgba(192,192,192,0.25)"
+                    : "rgba(205,127,50,0.25)";
+            g.drawCircle(badgeX + badgeSize / 2, badgeY + badgeSize / 2, badgeSize / 2 + 4, glowColor);
+
+            // 徽章背景 - 圆形渐变效果（用两层模拟）
+            const innerColor = rankType === "gold"
+                ? "#FFE066"
+                : rankType === "silver"
+                    ? "#E0E0E0"
+                    : "#E5A060";
             g.drawCircle(badgeX + badgeSize / 2, badgeY + badgeSize / 2, badgeSize / 2, badgeColor);
+            // 高光
+            g.drawCircle(badgeX + badgeSize / 2 - 2, badgeY + badgeSize / 2 - 2, badgeSize / 4, innerColor);
 
             // 排名数字
             const rankNum = new Laya.Text();
@@ -444,7 +569,7 @@ export class LeaderboardPanel extends Laya.Scene {
             item.addChild(rankNum);
         } else {
             // 普通排名 - 圆形灰底
-            g.drawCircle(badgeX + badgeSize / 2, badgeY + badgeSize / 2, badgeSize / 2, "rgba(255,255,255,0.1)");
+            g.drawCircle(badgeX + badgeSize / 2, badgeY + badgeSize / 2, badgeSize / 2, "rgba(255,255,255,0.08)");
 
             const rankNum = new Laya.Text();
             rankNum.text = String(data.rank);
@@ -463,29 +588,29 @@ export class LeaderboardPanel extends Laya.Scene {
         const nameText = new Laya.Text();
         nameText.text = data.name;
         nameText.font = "Microsoft YaHei";
-        nameText.fontSize = isTop3 ? 15 : 13;
+        nameText.fontSize = isTop3 ? 14 : 13;
         nameText.bold = isTop3;
         nameText.color = isTop3 ? this.COLORS[rankType as keyof typeof this.COLORS] || this.COLORS.normal : this.COLORS.normal;
-        nameText.pos(54, isTop3 ? 10 : 8);
+        nameText.pos(52, isTop3 ? 8 : 6);
         item.addChild(nameText);
 
-        // 时间和分数
-        const statsY = isTop3 ? 28 : 26;
+        // 时间和分数 - 水平排列
+        const statsY = isTop3 ? 24 : 22;
 
         const timeText = new Laya.Text();
-        timeText.text = "⏱ " + data.time;
+        timeText.text = data.time;
         timeText.font = "Microsoft YaHei";
         timeText.fontSize = 11;
         timeText.color = this.COLORS.accent;
-        timeText.pos(54, statsY);
+        timeText.pos(52, statsY);
         item.addChild(timeText);
 
         const scoreText = new Laya.Text();
-        scoreText.text = "⭐ " + data.score + "分";
+        scoreText.text = data.score + "分";
         scoreText.font = "Microsoft YaHei";
         scoreText.fontSize = 11;
         scoreText.color = this.COLORS.textMuted;
-        scoreText.pos(150, statsY);
+        scoreText.pos(140, statsY);
         item.addChild(scoreText);
 
         return item;
@@ -500,7 +625,7 @@ export class LeaderboardPanel extends Laya.Scene {
         emptyText.leading = 10;
         emptyText.width = 320;
         emptyText.align = "center";
-        emptyText.height = 370;
+        emptyText.height = 360;
         emptyText.valign = "middle";
         this.listContainer.addChild(emptyText);
     }
@@ -511,7 +636,7 @@ export class LeaderboardPanel extends Laya.Scene {
         const gap = 20;
         const panelW = 340;
         const startX = (panelW - (btnW * 2 + gap)) / 2;
-        const btnY = 520;
+        const btnY = 500;
 
         // 再来一局按钮
         const primaryBtn = this.createButton("再来一局", btnW, btnH, true);
