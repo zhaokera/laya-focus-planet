@@ -4,6 +4,7 @@ import { GameScene } from "./GameScene";
 @regClass("84f89060-d701-4411-b5dc-ae6e4a05aed0", "../src/Main.ts")
 export class Main extends Laya.Scene {
     private currentDifficulty: number = 3;
+    private _isStarting: boolean = false;
 
     private readonly designW: number = 750;
     private readonly designH: number = 1334;
@@ -163,11 +164,13 @@ export class Main extends Laya.Scene {
                 console.log("[Home] click:", d.label);
                 wrap.scale(0.97, 0.97);
                 wrap.alpha = 0.92;
-                this.timer.frameOnce(3, this, onRelease);
+                onRelease();
 
                 if (d.action === "start") {
+                    if (this._isStarting) return;
+                    this._isStarting = true;
                     this.currentDifficulty = 5;
-                    this.timer.frameOnce(4, this, this.startGame);
+                    this.startGame();
                 } else if (d.action === "challenge") {
                     this.currentDifficulty = 4;
                 } else if (d.action === "rank") {
@@ -175,8 +178,7 @@ export class Main extends Laya.Scene {
                 }
             };
 
-            wrap.on(Event.TOUCH_START, this, onTap);
-            wrap.on(Event.MOUSE_DOWN, this, onTap);
+            wrap.on(Event.CLICK, this, onTap);
         });
     }
 
@@ -212,19 +214,8 @@ export class Main extends Laya.Scene {
         }
         const path = candidates[index];
         sp.graphics.clear();
-        sp.off(Event.ERROR, this, null);
-        sp.once(Event.ERROR, this, () => {
-            console.warn(`[HomeAsset] fail ${path}, try next`);
-            this.tryLoadAsset(sp, key, candidates, index + 1, w, h);
-        });
-        sp.loadImage(path, 0, 0, w, h, Laya.Handler.create(this, () => {
-            if (!sp.texture) {
-                console.warn(`[HomeAsset] empty texture ${path}, try next`);
-                this.tryLoadAsset(sp, key, candidates, index + 1, w, h);
-            } else if (index > 0) {
-                console.warn(`[HomeAsset] fallback success key=${key} path=${path}`);
-            }
-        }));
+        // Use compatibility-safe loadImage signature for this runtime.
+        sp.loadImage(path);
     }
 
     private makeCandidates(rel: string): string[] {

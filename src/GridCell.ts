@@ -67,11 +67,13 @@ export class GridCell extends Laya.Sprite {
     public playPressFeedback(): void {
         if (this._isLocked) return;
 
-        Laya.Tween.clearAll(this);
         this.scale(1, 1);
-        Laya.Tween.to(this, { scaleX: 0.95, scaleY: 0.95 }, 60, null, Laya.Handler.create(this, () => {
-            Laya.Tween.to(this, { scaleX: 1, scaleY: 1 }, 80);
-        }));
+        this.scale(0.95, 0.95);
+        Laya.timer.once(80, this, () => {
+            if (!this.destroyed) {
+                this.scale(1, 1);
+            }
+        });
     }
 
     public markCompleted(): void {
@@ -91,15 +93,18 @@ export class GridCell extends Laya.Sprite {
             this._state = "error";
             this.refreshVisual();
 
-            Laya.Tween.clearAll(this);
             this.scale(1, 1);
-            Laya.Tween.to(this, { scaleX: 1.05, scaleY: 1.05 }, 70, null, Laya.Handler.create(this, () => {
-                Laya.Tween.to(this, { scaleX: 1, scaleY: 1 }, 90, null, Laya.Handler.create(this, () => {
+            this.scale(1.05, 1.05);
+            Laya.timer.once(90, this, () => {
+                if (!this.destroyed) {
+                    this.scale(1, 1);
                     this._state = "idle";
                     this.refreshVisual();
                     resolve();
-                }));
-            }));
+                } else {
+                    resolve();
+                }
+            });
         });
     }
 
@@ -189,6 +194,15 @@ export class GridCell extends Laya.Sprite {
         return this._expected;
     }
 
+    public reset(number: number, expected: number): void {
+        this._number = number;
+        this._expected = expected;
+        this._isLocked = false;
+        this._state = "idle";
+        this.stopPulseAnimation();
+        this.refreshVisual();
+    }
+
     private getBgSkinByState(): string {
         if (this._state === "correct") return this.ASSET.correct;
         if (this._state === "error") return this.ASSET.error;
@@ -206,15 +220,7 @@ export class GridCell extends Laya.Sprite {
             return;
         }
         const path = candidates[index];
-        sp.off(Laya.Event.ERROR, this, null);
-        sp.once(Laya.Event.ERROR, this, () => {
-            this.tryLoad(sp, candidates, index + 1, w, h);
-        });
-        sp.loadImage(path, 0, 0, w, h, Laya.Handler.create(this, () => {
-            if (!sp.texture) {
-                this.tryLoad(sp, candidates, index + 1, w, h);
-            }
-        }));
+        sp.loadImage(path);
     }
 
     private makeCandidates(rel: string): string[] {

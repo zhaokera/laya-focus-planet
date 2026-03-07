@@ -5,6 +5,7 @@ import { GridCell } from "./GridCell";
 @regClass("game_scene", "../src/GameScene.ts")
 export class GameScene extends Laya.Scene {
     public currentDifficulty: number = 4;
+    private readonly SAFE_RENDER: boolean = true;
 
     private readonly BASE_W: number = 375;
     private readonly BASE_H: number = 750;
@@ -20,7 +21,6 @@ export class GameScene extends Laya.Scene {
         hudPanel: "ui/game_design/hud_panel.png",
         diffBtnActive: "ui/game_design/diff_btn_active.png",
         diffBtnNormal: "ui/game_design/diff_btn_normal.png",
-        hintBtn: "ui/game_design/hint_btn.png",
         gamePanel: "ui/game_design/game_panel.png",
         startBtn: "ui/game_design/start_btn.png",
         popupPanel: "ui/game_design/popup_panel.png",
@@ -41,12 +41,12 @@ export class GameScene extends Laya.Scene {
     private errorText: Laya.Text = null;
 
     private difficultyBtns: Record<number, Laya.Sprite> = {};
-    private hintBtn: Laya.Sprite = null;
-    private hintBtnText: Laya.Text = null;
     private startBtn: Laya.Sprite = null;
 
     private cells: GridCell[] = [];
+    private panelShadow: Laya.Sprite = null;
     private panelSprite: Laya.Sprite = null;
+    private gridLayer: Laya.Sprite = null;
 
     private popupOverlay: Laya.Sprite = null;
     private popupPanel: Laya.Sprite = null;
@@ -55,7 +55,6 @@ export class GameScene extends Laya.Scene {
     private _currentNumber: number = 1;
     private _totalNumbers: number = 16;
     private _errors: number = 0;
-    private _showHints: boolean = false;
     private _isPlaying: boolean = false;
     private _startTime: number = 0;
 
@@ -73,7 +72,6 @@ export class GameScene extends Laya.Scene {
         this.createTitle();
         this.createHudPanel();
         this.createDifficultyButtons();
-        this.createHintButton();
         this.createGamePanelAndGrid();
         this.createStartButton();
         this.createLegend();
@@ -139,6 +137,7 @@ export class GameScene extends Laya.Scene {
 
     private createBackground(): void {
         // Stage-level full-screen background handles main fill.
+        if (this.SAFE_RENDER) return;
         this.bgLayer.graphics.drawRect(0, 0, this.BASE_W, this.BASE_H, "rgba(13,11,30,0.05)");
 
         const stars = [
@@ -166,14 +165,15 @@ export class GameScene extends Laya.Scene {
 
     private twinkleStar(star: Laya.Sprite, delayMs: number): void {
         Laya.timer.once(delayMs, this, () => {
-            const loop = () => {
-                if (!star || star.destroyed) return;
-                Laya.Tween.to(star, { alpha: 1 }, 900, Laya.Ease.sineInOut, Laya.Handler.create(this, () => {
-                    if (!star || star.destroyed) return;
-                    Laya.Tween.to(star, { alpha: 0.3 }, 900, Laya.Ease.sineInOut, Laya.Handler.create(this, loop));
-                }));
+            if (!star || star.destroyed) return;
+            const ticker = () => {
+                if (!star || star.destroyed) {
+                    Laya.timer.clear(this, ticker);
+                    return;
+                }
+                star.alpha = 0.3 + (Math.sin(Laya.timer.currTimer * 0.003) + 1) * 0.35;
             };
-            loop();
+            Laya.timer.frameLoop(1, this, ticker);
         });
     }
 
@@ -194,9 +194,11 @@ export class GameScene extends Laya.Scene {
     }
 
     private createHudPanel(): void {
-        const shadow = new Laya.Sprite();
-        shadow.graphics.drawRoundRect((this.BASE_W - 340) * 0.5, 77, 340, 90, 16, "rgba(0,0,0,0.18)");
-        this.uiLayer.addChild(shadow);
+        if (!this.SAFE_RENDER) {
+            const shadow = new Laya.Sprite();
+            shadow.graphics.drawRoundRect((this.BASE_W - 340) * 0.5, 77, 340, 90, 16, "rgba(0,0,0,0.18)");
+            this.uiLayer.addChild(shadow);
+        }
         this.hudPanel = this.createImage(this.uiLayer, this.ASSET.hudPanel, (this.BASE_W - 340) * 0.5, 75, 340, 90, "16,16,16,16");
         this.hudPanel.alpha = 1;
         this.targetText = this.createHudItem("目标", "1", "#FFD700", 0);
@@ -262,7 +264,7 @@ export class GameScene extends Laya.Scene {
             btn.addChild(text);
 
             this.paintDifficultyBtn(btn, size === this._currentSize);
-            btn.on(Event.TOUCH_START, this, () => this.onSelectDifficulty(size));
+            btn.on(Event.CLICK, this, () => this.onSelectDifficulty(size));
 
             this.difficultyBtns[size] = btn;
             this.uiLayer.addChild(btn);
@@ -276,70 +278,68 @@ export class GameScene extends Laya.Scene {
         this.loadSpriteSkin(bg, selected ? this.ASSET.diffBtnActive : this.ASSET.diffBtnNormal, bg.width, bg.height);
     }
 
-    private createHintButton(): void {
-        this.hintBtn = new Laya.Sprite();
-        this.hintBtn.size(80, 34);
-        this.hintBtn.pos(this.BASE_W - 20 - 80, 185);
-        this.hintBtn.mouseEnabled = true;
-
-        this.createImage(this.hintBtn, this.ASSET.hintBtn, 0, 0, 80, 34, "17,17,17,17");
-
-        this.hintBtnText = new Laya.Text();
-        this.hintBtnText.text = "提示: 关";
-        this.hintBtnText.font = "Microsoft YaHei";
-        this.hintBtnText.fontSize = 12;
-        this.hintBtnText.color = "#FFFFFF";
-        this.hintBtnText.width = 80;
-        this.hintBtnText.height = 34;
-        this.hintBtnText.align = "center";
-        this.hintBtnText.valign = "middle";
-        this.hintBtn.addChild(this.hintBtnText);
-
-        this.hintBtn.on(Event.TOUCH_START, this, this.onToggleHint);
-        this.uiLayer.addChild(this.hintBtn);
-    }
-
     private createGamePanelAndGrid(): void {
-        if (this.panelSprite) {
-            this.panelSprite.destroy();
-            this.panelSprite = null;
-        }
-
         this.cells.forEach((cell) => cell.destroy());
         this.cells = [];
 
         const panelX = (this.BASE_W - 320) * 0.5;
         const panelY = 245;
 
-        const shadow = new Laya.Sprite();
-        shadow.graphics.drawRoundRect(panelX + 6, panelY + 6, 320, 320, 24, "rgba(0,0,0,0.4)");
-        this.gameLayer.addChild(shadow);
+        if (!this.panelShadow) {
+            this.panelShadow = new Laya.Sprite();
+            this.gameLayer.addChild(this.panelShadow);
+            if (!this.SAFE_RENDER) {
+                this.panelShadow.graphics.drawRoundRect(panelX + 6, panelY + 6, 320, 320, 24, "rgba(0,0,0,0.4)");
+            }
+        }
 
-        this.panelSprite = new Laya.Sprite();
-        this.panelSprite.size(320, 320);
+        if (!this.panelSprite) {
+            this.panelSprite = new Laya.Sprite();
+            this.panelSprite.size(320, 320);
+            this.gameLayer.addChild(this.panelSprite);
+            this.createImage(this.panelSprite, this.ASSET.gamePanel, 0, 0, 320, 320, "24,24,24,24");
+            this.drawPanelCorners();
+            this.gridLayer = new Laya.Sprite();
+            this.panelSprite.addChild(this.gridLayer);
+        }
         this.panelSprite.pos(panelX, panelY);
-        this.gameLayer.addChild(this.panelSprite);
 
-        this.createImage(this.panelSprite, this.ASSET.gamePanel, 0, 0, 320, 320, "24,24,24,24");
-        this.drawPanelCorners();
+        if (this.gridLayer) {
+            this.gridLayer.removeChildren();
+        }
         this.createGridCells();
     }
 
     private drawPanelCorners(): void {
+        if (this.SAFE_RENDER) return;
         const color = "rgba(139,92,246,0.6)";
-        const corners = [
-            { x: 8, y: 8, p: [["moveTo", 0, 24], ["lineTo", 0, 0], ["lineTo", 24, 0]] },
-            { x: 320 - 32, y: 8, p: [["moveTo", 0, 0], ["lineTo", 24, 0], ["lineTo", 24, 24]] },
-            { x: 8, y: 320 - 32, p: [["moveTo", 0, 0], ["lineTo", 0, 24], ["lineTo", 24, 24]] },
-            { x: 320 - 32, y: 320 - 32, p: [["moveTo", 24, 0], ["lineTo", 24, 24], ["lineTo", 0, 24]] }
-        ];
+        const lineW = 3;
+        const seg = 24;
+        const m = 8;
 
-        corners.forEach((c) => {
-            const s = new Laya.Sprite();
-            s.graphics.drawPath(0, 0, c.p as any, null, color, 3);
-            s.pos(c.x, c.y);
-            this.panelSprite.addChild(s);
-        });
+        const lt = new Laya.Sprite();
+        lt.graphics.drawLine(0, seg, 0, 0, color, lineW);
+        lt.graphics.drawLine(0, 0, seg, 0, color, lineW);
+        lt.pos(m, m);
+        this.panelSprite.addChild(lt);
+
+        const rt = new Laya.Sprite();
+        rt.graphics.drawLine(0, 0, seg, 0, color, lineW);
+        rt.graphics.drawLine(seg, 0, seg, seg, color, lineW);
+        rt.pos(320 - m - seg, m);
+        this.panelSprite.addChild(rt);
+
+        const lb = new Laya.Sprite();
+        lb.graphics.drawLine(0, 0, 0, seg, color, lineW);
+        lb.graphics.drawLine(0, seg, seg, seg, color, lineW);
+        lb.pos(m, 320 - m - seg);
+        this.panelSprite.addChild(lb);
+
+        const rb = new Laya.Sprite();
+        rb.graphics.drawLine(seg, 0, seg, seg, color, lineW);
+        rb.graphics.drawLine(0, seg, seg, seg, color, lineW);
+        rb.pos(320 - m - seg, 320 - m - seg);
+        this.panelSprite.addChild(rb);
     }
 
     private createGridCells(): void {
@@ -364,8 +364,8 @@ export class GameScene extends Laya.Scene {
                 const cell = new GridCell(value, this._currentNumber);
                 cell.setCellSize(cellSize);
                 cell.pos(startX + c * (cellSize + spacing), startY + r * (cellSize + spacing));
-                cell.on(Event.TOUCH_START, this, () => this.onClickCell(cell));
-                this.panelSprite.addChild(cell);
+                cell.on(Event.CLICK, this, () => this.onClickCell(cell));
+                this.gridLayer.addChild(cell);
                 this.cells.push(cell);
             }
         }
@@ -379,9 +379,11 @@ export class GameScene extends Laya.Scene {
         this.startBtn.pos((this.BASE_W - 200) * 0.5, this.BASE_H - 80 - 54);
         this.startBtn.mouseEnabled = true;
 
-        const shadow = new Laya.Sprite();
-        shadow.graphics.drawRoundRect(this.startBtn.x, this.startBtn.y + 2, 200, 54, 27, "rgba(139,92,246,0.34)");
-        this.uiLayer.addChild(shadow);
+        if (!this.SAFE_RENDER) {
+            const shadow = new Laya.Sprite();
+            shadow.graphics.drawRoundRect(this.startBtn.x, this.startBtn.y + 2, 200, 54, 27, "rgba(139,92,246,0.34)");
+            this.uiLayer.addChild(shadow);
+        }
 
         this.createImage(this.startBtn, this.ASSET.startBtn, 0, 0, 200, 54, "27,27,27,27");
 
@@ -399,7 +401,7 @@ export class GameScene extends Laya.Scene {
         text.valign = "middle";
         this.startBtn.addChild(text);
 
-        this.startBtn.on(Event.TOUCH_START, this, this.onStartGame);
+        this.startBtn.on(Event.CLICK, this, this.onStartGame);
         this.uiLayer.addChild(this.startBtn);
     }
 
@@ -411,44 +413,54 @@ export class GameScene extends Laya.Scene {
         ];
 
         const fontSize = 11;
-        const gap = 16;
         const dot = 10;
+        const dotTextGap = 8;
+        const labelW = 28;
+        const itemGap = 20;
+        const itemW = dot + dotTextGap + labelW;
+        const totalW = items.length * itemW + (items.length - 1) * itemGap;
 
-        let totalW = 0;
+        const legend = new Laya.Sprite();
+        legend.size(totalW, 16);
+        legend.pos((this.BASE_W - totalW) * 0.5, this.BASE_H - 34);
+        this.uiLayer.addChild(legend);
+
         items.forEach((it, i) => {
-            totalW += dot + 6 + it.label.length * fontSize * 0.6;
-            if (i < items.length - 1) totalW += gap;
-        });
+            const item = new Laya.Sprite();
+            item.pos(i * (itemW + itemGap), 0);
+            legend.addChild(item);
 
-        let x = (this.BASE_W - totalW) * 0.5;
-        const y = this.BASE_H - 20 - fontSize;
-
-        items.forEach((it) => {
-            const d = new Laya.Sprite();
-            d.graphics.drawRoundRect(0, 0, dot, dot, 3, it.color);
-            d.pos(x, y + (fontSize - dot) * 0.5);
-            this.uiLayer.addChild(d);
-            x += dot + 6;
+            if (!this.SAFE_RENDER) {
+                const d = new Laya.Sprite();
+                d.graphics.drawRoundRect(0, 0, dot, dot, 3, it.color);
+                d.alpha = 0.96;
+                d.pos(0, 3);
+                item.addChild(d);
+            }
 
             const t = new Laya.Text();
             t.text = it.label;
             t.font = "Microsoft YaHei";
-            t.fontSize = 11;
-            t.color = "rgba(255,255,255,0.5)";
-            t.pos(x, y);
-            this.uiLayer.addChild(t);
-            x += it.label.length * fontSize * 0.6 + gap;
+            t.fontSize = fontSize;
+            t.color = "rgba(255,255,255,0.58)";
+            t.width = labelW;
+            t.height = 16;
+            t.valign = "middle";
+            t.pos(dot + dotTextGap, 0);
+            item.addChild(t);
         });
     }
 
     private createPopup(): void {
         this.popupOverlay = new Laya.Sprite();
         this.popupOverlay.size(this.BASE_W, this.BASE_H);
-        this.popupOverlay.graphics.drawRect(0, 0, this.BASE_W, this.BASE_H, "rgba(0,0,0,0.65)");
+        if (!this.SAFE_RENDER) {
+            this.popupOverlay.graphics.drawRect(0, 0, this.BASE_W, this.BASE_H, "rgba(0,0,0,0.65)");
+        }
         this.popupOverlay.alpha = 0;
         this.popupOverlay.visible = false;
         this.popupOverlay.mouseEnabled = true;
-        this.popupOverlay.on(Event.TOUCH_START, this, () => { /* consume */ });
+        this.popupOverlay.on(Event.CLICK, this, () => { /* consume */ });
 
         this.popupPanel = new Laya.Sprite();
         this.popupPanel.size(280, 260);
@@ -486,7 +498,7 @@ export class GameScene extends Laya.Scene {
         btn.size(140, 44);
         btn.pos((280 - 140) * 0.5, 190);
         btn.mouseEnabled = true;
-        btn.on(Event.TOUCH_START, this, this.onClosePopupAndReset);
+        btn.on(Event.CLICK, this, this.onClosePopupAndReset);
         this.popupPanel.addChild(btn);
 
         this.createImage(btn, this.ASSET.popupBtn, 0, 0, 140, 44, "22,22,22,22");
@@ -525,15 +537,7 @@ export class GameScene extends Laya.Scene {
             return;
         }
         const path = candidates[index];
-        sp.off(Event.ERROR, this, null);
-        sp.once(Event.ERROR, this, () => {
-            this.tryLoadSprite(sp, candidates, index + 1, w, h, x, y);
-        });
-        sp.loadImage(path, x, y, w, h, Laya.Handler.create(this, () => {
-            if (!sp.texture) {
-                this.tryLoadSprite(sp, candidates, index + 1, w, h, x, y);
-            }
-        }));
+        sp.loadImage(path);
     }
 
     private makeCandidates(rel: string): string[] {
@@ -560,21 +564,8 @@ export class GameScene extends Laya.Scene {
         this.createGamePanelAndGrid();
     }
 
-    private onToggleHint(): void {
-        this._showHints = !this._showHints;
-        this.hintBtnText.text = this._showHints ? "提示: 开" : "提示: 关";
-        this.updateActiveCell();
-    }
-
     private onStartGame(): void {
         this.resetRunState(true);
-        this.createGamePanelAndGrid();
-
-        Laya.Tween.clearAll(this.startBtn);
-        this.startBtn.scale(1, 1);
-        Laya.Tween.to(this.startBtn, { scaleX: 0.97, scaleY: 0.97 }, 70, null, Laya.Handler.create(this, () => {
-            Laya.Tween.to(this.startBtn, { scaleX: 1, scaleY: 1 }, 90);
-        }));
     }
 
     private onClickCell(cell: GridCell): void {
@@ -612,17 +603,20 @@ export class GameScene extends Laya.Scene {
         cell.showError();
 
         const ox = this.root.x;
-        Laya.Tween.to(this.root, { x: ox - 4 }, 40, null, Laya.Handler.create(this, () => {
-            Laya.Tween.to(this.root, { x: ox + 4 }, 40, null, Laya.Handler.create(this, () => {
-                Laya.Tween.to(this.root, { x: ox }, 40);
-            }));
-        }));
+        this.root.x = ox - 4;
+        Laya.timer.once(40, this, () => {
+            if (!this.root || this.root.destroyed) return;
+            this.root.x = ox + 4;
+            Laya.timer.once(40, this, () => {
+                if (!this.root || this.root.destroyed) return;
+                this.root.x = ox;
+            });
+        });
     }
 
     private updateActiveCell(): void {
         this.cells.forEach((cell) => {
-            const isActive = cell.getNumber() === this._currentNumber && !cell.isLocked();
-            cell.setHighlight(isActive);
+            cell.setHighlight(false);
         });
     }
 
@@ -656,19 +650,15 @@ export class GameScene extends Laya.Scene {
         }
 
         this.popupOverlay.visible = true;
-        this.popupOverlay.alpha = 0;
-        this.popupPanel.scale(0.8, 0.8);
-
-        Laya.Tween.to(this.popupOverlay, { alpha: 1 }, 220);
-        Laya.Tween.to(this.popupPanel, { scaleX: 1, scaleY: 1 }, 260, Laya.Ease.backOut);
+        this.popupOverlay.alpha = 1;
+        this.popupPanel.scale(1, 1);
     }
 
     private onClosePopupAndReset(): void {
-        Laya.Tween.to(this.popupOverlay, { alpha: 0 }, 180, null, Laya.Handler.create(this, () => {
-            this.popupOverlay.visible = false;
-            this.resetRunState(false);
-            this.createGamePanelAndGrid();
-        }));
+        this.popupOverlay.alpha = 0;
+        this.popupOverlay.visible = false;
+        this.resetRunState(false);
+        this.createGamePanelAndGrid();
     }
 
     private resetRunState(startImmediately: boolean): void {

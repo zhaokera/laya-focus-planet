@@ -32,11 +32,13 @@ export class GridCell extends Laya.Sprite {
         if (this._isLocked) {
             return;
         }
-        Laya.Tween.clearAll(this);
         this.scale(1, 1);
-        Laya.Tween.to(this, { scaleX: 0.96, scaleY: 0.96 }, 70, null, Laya.Handler.create(this, () => {
-            Laya.Tween.to(this, { scaleX: 1, scaleY: 1 }, 90);
-        }));
+        this.scale(0.96, 0.96);
+        Laya.timer.once(90, this, () => {
+            if (!this.destroyed) {
+                this.scale(1, 1);
+            }
+        });
     }
     markCompleted() {
         this._isLocked = true;
@@ -51,15 +53,19 @@ export class GridCell extends Laya.Sprite {
             }
             this._state = "error";
             this.refreshVisual();
-            Laya.Tween.clearAll(this);
             this.scale(1, 1);
-            Laya.Tween.to(this, { scaleX: 1.02, scaleY: 1.02 }, 80, null, Laya.Handler.create(this, () => {
-                Laya.Tween.to(this, { scaleX: 1, scaleY: 1 }, 100, null, Laya.Handler.create(this, () => {
+            this.scale(1.02, 1.02);
+            Laya.timer.once(100, this, () => {
+                if (!this.destroyed) {
+                    this.scale(1, 1);
                     this._state = "idle";
                     this.refreshVisual();
                     resolve();
-                }));
-            }));
+                }
+                else {
+                    resolve();
+                }
+            });
         });
     }
     reset(number, expected) {

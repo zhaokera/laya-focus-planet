@@ -10,6 +10,7 @@ let Main = class Main extends Laya.Scene {
     constructor() {
         super(...arguments);
         this.currentDifficulty = 3;
+        this._isStarting = false;
         this.designW = 750;
         this.designH = 1334;
         this.root = null;
@@ -139,10 +140,13 @@ let Main = class Main extends Laya.Scene {
                 console.log("[Home] click:", d.label);
                 wrap.scale(0.97, 0.97);
                 wrap.alpha = 0.92;
-                this.timer.frameOnce(3, this, onRelease);
+                onRelease();
                 if (d.action === "start") {
+                    if (this._isStarting)
+                        return;
+                    this._isStarting = true;
                     this.currentDifficulty = 5;
-                    this.timer.frameOnce(4, this, this.startGame);
+                    this.startGame();
                 }
                 else if (d.action === "challenge") {
                     this.currentDifficulty = 4;
@@ -151,8 +155,7 @@ let Main = class Main extends Laya.Scene {
                     this.currentDifficulty = 3;
                 }
             };
-            wrap.on(Event.TOUCH_START, this, onTap);
-            wrap.on(Event.MOUSE_DOWN, this, onTap);
+            wrap.on(Event.CLICK, this, onTap);
         });
     }
     createAssetImage(parent, key, x, y, w, h) {
@@ -171,20 +174,7 @@ let Main = class Main extends Laya.Scene {
         }
         const path = candidates[index];
         sp.graphics.clear();
-        sp.off(Event.ERROR, this, null);
-        sp.once(Event.ERROR, this, () => {
-            console.warn(`[HomeAsset] fail ${path}, try next`);
-            this.tryLoadAsset(sp, key, candidates, index + 1, w, h);
-        });
-        sp.loadImage(path, 0, 0, w, h, Laya.Handler.create(this, () => {
-            if (!sp.texture) {
-                console.warn(`[HomeAsset] empty texture ${path}, try next`);
-                this.tryLoadAsset(sp, key, candidates, index + 1, w, h);
-            }
-            else if (index > 0) {
-                console.warn(`[HomeAsset] fallback success key=${key} path=${path}`);
-            }
-        }));
+        sp.loadImage(path);
     }
     makeCandidates(rel) {
         return [
@@ -217,7 +207,7 @@ let Main = class Main extends Laya.Scene {
     startGame() {
         const scene = new GameScene();
         scene.name = "GameScene";
-        scene.setDifficulty(this.currentDifficulty);
+        scene.currentDifficulty = this.currentDifficulty;
         Laya.stage.addChild(scene);
         this.destroy();
     }
