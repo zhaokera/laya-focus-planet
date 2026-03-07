@@ -273,11 +273,11 @@ export class Main extends Laya.Scene {
     }
 
     private showLeaderboard(): void {
+        // 使用场景跳转方式打开排行榜
         const panel = new LeaderboardPanel();
-        panel.setOnClose(() => {
-            panel.destroy();
-        });
+        panel.name = "LeaderboardPanel";
         Laya.stage.addChild(panel);
+        this.destroy();
     }
 
     onDestroy(): void {

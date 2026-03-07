@@ -5,6 +5,8 @@
 
 const { Event } = Laya;
 
+import { Main } from "./Main";
+
 interface RankRecord {
     rank: number;
     name: string;
@@ -15,7 +17,7 @@ interface RankRecord {
     date: number;
 }
 
-export class LeaderboardPanel extends Laya.Sprite {
+export class LeaderboardPanel extends Laya.Scene {
     private readonly BASE_W: number = 375;
     private readonly BASE_H: number = 750;
 
@@ -35,6 +37,8 @@ export class LeaderboardPanel extends Laya.Sprite {
 
     private readonly STORAGE_KEY = "focus_planet_leaderboard";
 
+    private root: Laya.Sprite = null;
+    private stageBg: Laya.Sprite = null;
     private bgLayer: Laya.Sprite = null;
     private contentLayer: Laya.Sprite = null;
     private tabContainer: Laya.Sprite = null;
@@ -44,26 +48,75 @@ export class LeaderboardPanel extends Laya.Sprite {
     private currentTab: number = 0; // 0:总榜, 1:周榜, 2:月榜
     private tabBtns: Laya.Sprite[] = [];
 
-    private onCloseCallback: (() => void) | null = null;
-    private onRestartCallback: (() => void) | null = null;
-
     constructor() {
         super();
+    }
+
+    onAwake(): void {
+        Laya.stage.alignH = "center";
+        Laya.stage.alignV = "middle";
+        Laya.stage.scaleMode = "showall";
+        Laya.stage.screenMode = "vertical";
+        Laya.stage.bgColor = "#1A1A2E";
+
+        this.initRoot();
         this.initPanel();
+
+        Laya.stage.on(Event.RESIZE, this, this.onResize);
+    }
+
+    private initRoot(): void {
+        this.size(Math.max(320, Laya.stage.width), Math.max(568, Laya.stage.height));
+
+        // 全屏自适应背景
+        this.stageBg = new Laya.Sprite();
+        this.addChild(this.stageBg);
+        this.refreshStageBg();
+
+        // 缩放容器
+        this.root = new Laya.Sprite();
+        this.addChild(this.root);
+        this.applyLayoutScale();
+    }
+
+    private applyLayoutScale(): void {
+        const sw = Math.max(1, Laya.stage.width);
+        const sh = Math.max(1, Laya.stage.height);
+        const scale = Math.min(sw / this.BASE_W, sh / this.BASE_H);
+
+        this.root.scale(scale, scale);
+        this.root.pos((sw - this.BASE_W * scale) * 0.5, (sh - this.BASE_H * scale) * 0.5);
+        this.root.size(this.BASE_W, this.BASE_H);
+    }
+
+    private refreshStageBg(): void {
+        if (!this.stageBg) return;
+        const sw = Math.max(1, Laya.stage.width);
+        const sh = Math.max(1, Laya.stage.height);
+
+        this.stageBg.graphics.clear();
+        this.stageBg.graphics.drawRect(0, 0, sw, sh, "#1A1A2E");
+    }
+
+    private onResize(): void {
+        const sw = Math.max(320, Laya.stage.width);
+        const sh = Math.max(568, Laya.stage.height);
+        this.size(sw, sh);
+
+        this.applyLayoutScale();
+        this.refreshStageBg();
     }
 
     private initPanel(): void {
-        this.size(this.BASE_W, this.BASE_H);
-
         // 半透明遮罩背景
         this.bgLayer = new Laya.Sprite();
-        this.bgLayer.graphics.drawRect(0, 0, this.BASE_W, this.BASE_H, "rgba(0,0,0,0.8)");
+        this.bgLayer.graphics.drawRect(0, 0, this.BASE_W, this.BASE_H, "rgba(0,0,0,0.6)");
         this.bgLayer.alpha = 0;
-        this.addChild(this.bgLayer);
+        this.root.addChild(this.bgLayer);
 
         // 内容层
         this.contentLayer = new Laya.Sprite();
-        this.addChild(this.contentLayer);
+        this.root.addChild(this.contentLayer);
 
         this.createMainPanel();
         this.createTitle();
@@ -458,7 +511,7 @@ export class LeaderboardPanel extends Laya.Sprite {
         const secondaryBtn = this.createButton("返回主页", btnW, btnH, false);
         secondaryBtn.pos(startX + btnW + gap, btnY);
         this.contentLayer.addChild(secondaryBtn);
-        secondaryBtn.on(Event.CLICK, this, this.close);
+        secondaryBtn.on(Event.CLICK, this, this.goBackToMain);
     }
 
     private createButton(text: string, width: number, height: number, isPrimary: boolean): Laya.Sprite {
@@ -495,27 +548,16 @@ export class LeaderboardPanel extends Laya.Sprite {
     // ==================== 交互逻辑 ====================
 
     private onRestart(): void {
-        if (this.onRestartCallback) {
-            this.onRestartCallback();
-        }
-        this.close();
+        // 跳转到游戏场景
+        this.goBackToMain();
     }
 
-    public setOnClose(callback: () => void): void {
-        this.onCloseCallback = callback;
-    }
-
-    public setOnRestart(callback: () => void): void {
-        this.onRestartCallback = callback;
-    }
-
-    public close(): void {
-        this.playExitAnimation(() => {
-            if (this.onCloseCallback) {
-                this.onCloseCallback();
-            }
-            this.destroy();
-        });
+    private goBackToMain(): void {
+        // 跳转回主页场景
+        const mainScene = new Main();
+        mainScene.name = "Main";
+        Laya.stage.addChild(mainScene);
+        this.destroy();
     }
 
     // ==================== 动画 ====================
@@ -660,6 +702,8 @@ export class LeaderboardPanel extends Laya.Sprite {
     }
 
     public destroy(): void {
+        Laya.stage.off(Event.RESIZE, this, this.onResize);
+
         Laya.Tween.clearAll(this.bgLayer);
         Laya.Tween.clearAll(this.contentLayer);
         Laya.Tween.clearAll(this.listContainer);
