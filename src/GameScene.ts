@@ -2,142 +2,176 @@ const { regClass, Event } = Laya;
 
 import { GridCell } from "./GridCell";
 
-/**
- * 舒尔特方格游戏主场景
- * 星空紫蓝主题 - 100%还原设计稿
- */
 @regClass("game_scene", "../src/GameScene.ts")
 export class GameScene extends Laya.Scene {
-    public currentDifficulty: number = 4;  // 接收Main传递的难度
+    public currentDifficulty: number = 4;
 
-    // 网格尺寸配置
-    private GRID_SIZES: { [key: number]: { rows: number; cols: number } } = {
+    private readonly BASE_W: number = 375;
+    private readonly BASE_H: number = 750;
+
+    private readonly GRID_SIZES: Record<number, { rows: number; cols: number }> = {
         3: { rows: 3, cols: 3 },
         4: { rows: 4, cols: 4 },
         5: { rows: 5, cols: 5 }
     };
 
-    // 设计稿尺寸
-    private static CELL_SPACING: number = 6;  // 设计稿是6px
-    private static PANEL_SIZE: number = 320;  // 设计稿是320x320
+    private readonly ASSET = {
+        bgFull: "ui/game_design/bg_full.png",
+        hudPanel: "ui/game_design/hud_panel.png",
+        diffBtnActive: "ui/game_design/diff_btn_active.png",
+        diffBtnNormal: "ui/game_design/diff_btn_normal.png",
+        hintBtn: "ui/game_design/hint_btn.png",
+        gamePanel: "ui/game_design/game_panel.png",
+        startBtn: "ui/game_design/start_btn.png",
+        popupPanel: "ui/game_design/popup_panel.png",
+        popupBtn: "ui/game_design/popup_btn.png"
+    };
 
-    // 游戏状态
-    private _currentSize: number = 4;  // 默认4x4
-    private _currentNumber: number = 1;
-    private _totalNumbers: number = 16;
-    private _startTime: number = 0;
-    private _errors: number = 0;
-    private _isPlaying: boolean = false;
-    private _showHints: boolean = false;
-
-    // 容器
+    private root: Laya.Sprite = null;
+    private stageBg: Laya.Sprite = null;
     private bgLayer: Laya.Sprite = null;
-    private gridContainer: Laya.Sprite = null;
-    private uiContainer: Laya.Sprite = null;
-    private fxContainer: Laya.Sprite = null;
+    private gameLayer: Laya.Sprite = null;
+    private uiLayer: Laya.Sprite = null;
+    private fxLayer: Laya.Sprite = null;
 
-    // HUD元素
+    private titleText: Laya.Text = null;
     private hudPanel: Laya.Sprite = null;
     private targetText: Laya.Text = null;
     private timerText: Laya.Text = null;
     private errorText: Laya.Text = null;
 
-    // 按钮
-    private difficultyBtns: { [key: number]: Laya.Sprite } = {};
-    private startBtn: Laya.Sprite = null;
+    private difficultyBtns: Record<number, Laya.Sprite> = {};
     private hintBtn: Laya.Sprite = null;
+    private hintBtnText: Laya.Text = null;
+    private startBtn: Laya.Sprite = null;
 
-    // 装饰
-    private titleText: Laya.Text = null;
     private cells: GridCell[] = [];
-    private _timerRunning: boolean = false;
+    private panelSprite: Laya.Sprite = null;
+
+    private popupOverlay: Laya.Sprite = null;
+    private popupPanel: Laya.Sprite = null;
+
+    private _currentSize: number = 4;
+    private _currentNumber: number = 1;
+    private _totalNumbers: number = 16;
+    private _errors: number = 0;
+    private _showHints: boolean = false;
+    private _isPlaying: boolean = false;
+    private _startTime: number = 0;
 
     onAwake(): void {
-        // 使用Main传递的难度
-        if (this.currentDifficulty >= 3 && this.currentDifficulty <= 5) {
-            this._currentSize = this.currentDifficulty;
-            this._totalNumbers = this._currentSize * this._currentSize;
-        }
+        Laya.stage.alignH = "center";
+        Laya.stage.alignV = "middle";
+        Laya.stage.scaleMode = "showall";
+        Laya.stage.screenMode = "vertical";
 
-        // 设置场景大小
-        this.size(Laya.stage.width, Laya.stage.height);
-
-        // Scene 本身就是容器
-        this.gridContainer = this;
-
-        this.bgLayer = new Laya.Sprite();
-        this.gridContainer.addChild(this.bgLayer);
-
-        this.uiContainer = new Laya.Sprite();
-        this.gridContainer.addChild(this.uiContainer);
-
-        this.fxContainer = new Laya.Sprite();
-        this.gridContainer.addChild(this.fxContainer);
+        this.applyDifficultyFromEntry();
+        this.initRoot();
+        this.createLayers();
 
         this.createBackground();
         this.createTitle();
         this.createHudPanel();
         this.createDifficultyButtons();
-        this.createActionButtons();
+        this.createHintButton();
+        this.createGamePanelAndGrid();
+        this.createStartButton();
         this.createLegend();
-        this.layoutUI();
+        this.createPopup();
 
         Laya.timer.frameLoop(1, this, this.updateTimer);
+        Laya.stage.on(Event.RESIZE, this, this.onResize);
+    }
+
+    private applyDifficultyFromEntry(): void {
+        const level = Number(this.currentDifficulty) || 4;
+        this._currentSize = level === 3 || level === 4 || level === 5 ? level : 4;
+        this._totalNumbers = this._currentSize * this._currentSize;
+    }
+
+    private initRoot(): void {
+        this.size(Math.max(320, Laya.stage.width), Math.max(568, Laya.stage.height));
+        Laya.stage.bgColor = "#0D0B1E";
+
+        this.stageBg = new Laya.Sprite();
+        this.addChild(this.stageBg);
+
+        this.root = new Laya.Sprite();
+        this.addChild(this.root);
+        this.applyLayoutScale();
+        this.refreshStageBackground();
+    }
+
+    private applyLayoutScale(): void {
+        const sw = Math.max(1, Laya.stage.width);
+        const sh = Math.max(1, Laya.stage.height);
+        const scale = Math.min(sw / this.BASE_W, sh / this.BASE_H);
+
+        this.root.scale(scale, scale);
+        this.root.pos((sw - this.BASE_W * scale) * 0.5, (sh - this.BASE_H * scale) * 0.5);
+        this.root.size(this.BASE_W, this.BASE_H);
+    }
+
+    private refreshStageBackground(): void {
+        if (!this.stageBg) return;
+        const sw = Math.max(1, Laya.stage.width);
+        const sh = Math.max(1, Laya.stage.height);
+        const scale = Math.max(sw / this.BASE_W, sh / this.BASE_H);
+        const w = Math.ceil(this.BASE_W * scale);
+        const h = Math.ceil(this.BASE_H * scale);
+        const x = Math.floor((sw - w) * 0.5);
+        const y = Math.floor((sh - h) * 0.5);
+        this.stageBg.graphics.clear();
+        this.loadSpriteSkin(this.stageBg, this.ASSET.bgFull, w, h, x, y);
+    }
+
+    private createLayers(): void {
+        this.bgLayer = new Laya.Sprite();
+        this.gameLayer = new Laya.Sprite();
+        this.uiLayer = new Laya.Sprite();
+        this.fxLayer = new Laya.Sprite();
+
+        this.root.addChild(this.bgLayer);
+        this.root.addChild(this.gameLayer);
+        this.root.addChild(this.uiLayer);
+        this.root.addChild(this.fxLayer);
     }
 
     private createBackground(): void {
-        const w = Laya.stage.width;
-        const h = Laya.stage.height;
+        // Stage-level full-screen background handles main fill.
+        this.bgLayer.graphics.drawRect(0, 0, this.BASE_W, this.BASE_H, "rgba(13,11,30,0.05)");
 
-        // 设计稿背景：深色渐变
-        this.bgLayer.graphics.drawRect(0, 0, w, h, "#0D0B1E");
-
-        // 顶部紫光
-        const topGlow = new Laya.Sprite();
-        topGlow.graphics.drawCircle(w/2, -100, 400, "rgba(139, 92, 246, 0.25)");
-        this.bgLayer.addChild(topGlow);
-
-        // 底部蓝光
-        const bottomGlow = new Laya.Sprite();
-        bottomGlow.graphics.drawCircle(w/2, h + 100, 350, "rgba(59, 130, 246, 0.2)");
-        this.bgLayer.addChild(bottomGlow);
-
-        // 叠加渐变层
-        const overlay = new Laya.Sprite();
-        overlay.graphics.drawRect(0, 0, w, h, "rgba(88, 28, 135, 0.15)");
-        this.bgLayer.addChild(overlay);
-
-        // 添加星星
-        this.createStars();
-    }
-
-    private createStars(): void {
-        const starPositions = [
-            { x: 0.08, y: 0.15 }, { x: 0.25, y: 0.08 }, { x: 0.70, y: 0.20 },
-            { x: 0.85, y: 0.12 }, { x: 0.15, y: 0.25 }, { x: 0.55, y: 0.18 },
-            { x: 0.90, y: 0.30 }, { x: 0.05, y: 0.35 }, { x: 0.45, y: 0.05 },
-            { x: 0.35, y: 0.22 }
+        const stars = [
+            { x: 0.08, y: 0.15, r: 2, d: 0 },
+            { x: 0.25, y: 0.08, r: 1.5, d: 0.5 },
+            { x: 0.70, y: 0.20, r: 2, d: 1.0 },
+            { x: 0.85, y: 0.12, r: 1.5, d: 1.5 },
+            { x: 0.15, y: 0.25, r: 1.5, d: 0.3 },
+            { x: 0.55, y: 0.18, r: 2, d: 0.8 },
+            { x: 0.90, y: 0.30, r: 1.5, d: 1.2 },
+            { x: 0.05, y: 0.35, r: 1.5, d: 0.2 },
+            { x: 0.45, y: 0.05, r: 1.5, d: 1.8 },
+            { x: 0.35, y: 0.22, r: 1, d: 0.7 }
         ];
 
-        starPositions.forEach((pos, i) => {
+        stars.forEach((cfg) => {
             const star = new Laya.Sprite();
-            const size = i % 2 === 0 ? 2 : 1.5;
-            star.graphics.drawCircle(0, 0, size, "rgba(255, 255, 255, 0.7)");
-            star.pos(pos.x * Laya.stage.width, pos.y * Laya.stage.height);
+            star.graphics.drawCircle(0, 0, cfg.r, "#FFFFFF");
+            star.alpha = 0.3;
+            star.pos(this.BASE_W * cfg.x, this.BASE_H * cfg.y);
             this.bgLayer.addChild(star);
-            this.animateStar(star, 0.7, i * 0.2);
+            this.twinkleStar(star, cfg.d * 1000);
         });
     }
 
-    private animateStar(star: Laya.Sprite, baseAlpha: number, delay: number): void {
-        Laya.timer.once(delay * 1000, this, () => {
+    private twinkleStar(star: Laya.Sprite, delayMs: number): void {
+        Laya.timer.once(delayMs, this, () => {
             const loop = () => {
-                const duration = 1500 + Math.random() * 1500;
-                Laya.Tween.to(star, { alpha: baseAlpha * 0.3 }, duration, Laya.Ease.sineInOut,
-                    Laya.Handler.create(this, () => {
-                        Laya.Tween.to(star, { alpha: baseAlpha }, duration, Laya.Ease.sineInOut,
-                            Laya.Handler.create(this, loop)));
-                    }));
+                if (!star || star.destroyed) return;
+                Laya.Tween.to(star, { alpha: 1 }, 900, Laya.Ease.sineInOut, Laya.Handler.create(this, () => {
+                    if (!star || star.destroyed) return;
+                    Laya.Tween.to(star, { alpha: 0.3 }, 900, Laya.Ease.sineInOut, Laya.Handler.create(this, loop));
+                }));
             };
             loop();
         });
@@ -146,637 +180,534 @@ export class GameScene extends Laya.Scene {
     private createTitle(): void {
         this.titleText = new Laya.Text();
         this.titleText.text = "舒尔特方格";
-        this.titleText.fontSize = 24;
         this.titleText.font = "Microsoft YaHei";
+        this.titleText.fontSize = 24;
         this.titleText.bold = true;
         this.titleText.color = "#F8F3CF";
-        this.titleText.stroke = 3;
-        this.titleText.strokeColor = "rgba(0, 0, 0, 0.5)";
+        this.titleText.stroke = 2;
+        this.titleText.strokeColor = "rgba(0,0,0,0.5)";
+        this.titleText.letterSpacing = 4;
+        this.titleText.width = this.BASE_W;
         this.titleText.align = "center";
-        this.uiContainer.addChild(this.titleText);
+        this.titleText.pos(0, 30);
+        this.uiLayer.addChild(this.titleText);
     }
 
     private createHudPanel(): void {
-        const w = Laya.stage.width;
-        const panelW = 340;  // 设计稿尺寸
-        const panelH = 90;   // 设计稿尺寸
-        const panelY = 75;   // 设计稿位置
-
-        this.hudPanel = new Laya.Sprite();
-        this.hudPanel.pos((w - panelW) / 2, panelY);
-        this.hudPanel.size(panelW, panelH);
-
-        // 设计稿：玻璃拟态背景
-        this.hudPanel.graphics.drawRoundRect(0, 0, panelW, panelH, 16, "rgba(255, 255, 255, 0.06)", "rgba(255, 255, 255, 0.12)", 2);
-        // 内发光
-        this.hudPanel.graphics.drawRoundRect(4, 4, panelW - 8, panelH - 8, 14, null, "rgba(139, 92, 246, 0.15)", 1);
-
-        this.uiContainer.addChild(this.hudPanel);
-
-        // 目标/用时/错误
-        this.createHudItem("目标", "1", "#FFD700", 0);
-        this.createHudItem("用时", "00:00", "#4FC3F7", 1);
-        this.createHudItem("错误", "0", "#FF6B6B", 2);
+        const shadow = new Laya.Sprite();
+        shadow.graphics.drawRoundRect((this.BASE_W - 340) * 0.5, 77, 340, 90, 16, "rgba(0,0,0,0.18)");
+        this.uiLayer.addChild(shadow);
+        this.hudPanel = this.createImage(this.uiLayer, this.ASSET.hudPanel, (this.BASE_W - 340) * 0.5, 75, 340, 90, "16,16,16,16");
+        this.hudPanel.alpha = 1;
+        this.targetText = this.createHudItem("目标", "1", "#FFD700", 0);
+        this.timerText = this.createHudItem("用时", "00:00", "#4FC3F7", 1);
+        this.errorText = this.createHudItem("错误", "0", "#FF6B6B", 2);
     }
 
-    private createHudItem(label: string, value: string, color: string, index: number): void {
-        const panelW = this.hudPanel.width;
-        const itemW = panelW / 3;
-        const x = index * itemW;
+    private createHudItem(label: string, value: string, color: string, index: number): Laya.Text {
+        const itemW = 340 / 3;
+        const originX = index * itemW;
 
-        // 标签
         const labelText = new Laya.Text();
         labelText.text = label;
-        labelText.fontSize = 12;
-        labelText.color = "rgba(255, 255, 255, 0.6)";
         labelText.font = "Microsoft YaHei";
-        labelText.pos(x + itemW / 2, 14);
+        labelText.fontSize = 12;
+        labelText.color = "rgba(255,255,255,0.6)";
+        labelText.width = itemW;
         labelText.align = "center";
+        labelText.pos(originX, 17);
         this.hudPanel.addChild(labelText);
 
-        // 数值
         const valueText = new Laya.Text();
         valueText.text = value;
-        valueText.fontSize = 26;
         valueText.font = "Microsoft YaHei";
+        valueText.fontSize = 26;
         valueText.bold = true;
         valueText.color = color;
-        valueText.stroke = 2;
-        valueText.strokeColor = "rgba(0, 0, 0, 0.3)";
-        valueText.pos(x + itemW / 2, 34);
+        valueText.width = itemW;
         valueText.align = "center";
+        valueText.pos(originX, 37);
         this.hudPanel.addChild(valueText);
 
-        if (label === "目标") this.targetText = valueText;
-        else if (label === "用时") this.timerText = valueText;
-        else if (label === "错误") this.errorText = valueText;
+        return valueText;
     }
 
     private createDifficultyButtons(): void {
-        const w = Laya.stage.width;
-        const btns = [3, 4, 5];
-        const btnW = 65;   // 设计稿尺寸
-        const btnH = 38;   // 设计稿尺寸
-        const spacing = 16;
-        const totalW = btns.length * btnW + (btns.length - 1) * spacing;
-        let xOffset = (w - totalW) / 2;
+        const sizes = [3, 4, 5];
+        const btnW = 65;
+        const btnH = 38;
+        const gap = 16;
+        const total = sizes.length * btnW + (sizes.length - 1) * gap;
 
-        btns.forEach(size => {
-            const btn = this.createStyledButton(size + "×" + size, btnW, btnH, size === this._currentSize);
-            btn.pos(xOffset, 185);  // 设计稿位置
-            btn.name = "diff_" + size;
-            (btn as any).userData = { gridSize: size };
-            btn.on(Event.TOUCH_START, this, () => { this.selectDifficulty(size); });
+        let x = (this.BASE_W - total) * 0.5 - 3;
+        sizes.forEach((size) => {
+            const btn = new Laya.Sprite();
+            btn.size(btnW, btnH);
+            btn.pos(x, 185);
+            btn.mouseEnabled = true;
+
+            const bg = this.createImage(btn, this.ASSET.diffBtnNormal, 0, 0, btnW, btnH, "8,8,8,8");
+            bg.name = "bg";
+
+            const text = new Laya.Text();
+            text.text = `${size}×${size}`;
+            text.font = "Microsoft YaHei";
+            text.fontSize = 14;
+            text.bold = true;
+            text.color = "#FFFFFF";
+            text.width = btnW;
+            text.height = btnH;
+            text.align = "center";
+            text.valign = "middle";
+            btn.addChild(text);
+
+            this.paintDifficultyBtn(btn, size === this._currentSize);
+            btn.on(Event.TOUCH_START, this, () => this.onSelectDifficulty(size));
+
             this.difficultyBtns[size] = btn;
-            this.uiContainer.addChild(btn);
-            xOffset += btnW + spacing;
+            this.uiLayer.addChild(btn);
+            x += btnW + gap;
         });
     }
 
-    private createStyledButton(text: string, w: number, h: number, selected: boolean): Laya.Sprite {
-        const btn = new Laya.Sprite();
-        btn.size(w, h);
+    private paintDifficultyBtn(btn: Laya.Sprite, selected: boolean): void {
+        const bg = btn.getChildByName("bg") as Laya.Sprite;
+        if (!bg) return;
+        this.loadSpriteSkin(bg, selected ? this.ASSET.diffBtnActive : this.ASSET.diffBtnNormal, bg.width, bg.height);
+    }
 
-        // 设计稿按钮样式
-        if (selected) {
-            // 选中：渐变紫色
-            btn.graphics.drawRoundRect(0, 0, w, h, 8, "#8B5CF6", "#6D28D9", 2);
-        } else {
-            // 未选中：半透明
-            btn.graphics.drawRoundRect(0, 0, w, h, 8, "rgba(255, 255, 255, 0.08)", "rgba(255, 255, 255, 0.2)", 2);
+    private createHintButton(): void {
+        this.hintBtn = new Laya.Sprite();
+        this.hintBtn.size(80, 34);
+        this.hintBtn.pos(this.BASE_W - 20 - 80, 185);
+        this.hintBtn.mouseEnabled = true;
+
+        this.createImage(this.hintBtn, this.ASSET.hintBtn, 0, 0, 80, 34, "17,17,17,17");
+
+        this.hintBtnText = new Laya.Text();
+        this.hintBtnText.text = "提示: 关";
+        this.hintBtnText.font = "Microsoft YaHei";
+        this.hintBtnText.fontSize = 12;
+        this.hintBtnText.color = "#FFFFFF";
+        this.hintBtnText.width = 80;
+        this.hintBtnText.height = 34;
+        this.hintBtnText.align = "center";
+        this.hintBtnText.valign = "middle";
+        this.hintBtn.addChild(this.hintBtnText);
+
+        this.hintBtn.on(Event.TOUCH_START, this, this.onToggleHint);
+        this.uiLayer.addChild(this.hintBtn);
+    }
+
+    private createGamePanelAndGrid(): void {
+        if (this.panelSprite) {
+            this.panelSprite.destroy();
+            this.panelSprite = null;
         }
 
-        const textNode = new Laya.Text();
-        textNode.text = text;
-        textNode.fontSize = 14;
-        textNode.font = "Microsoft YaHei";
-        textNode.bold = true;
-        textNode.color = "#FFFFFF";
-        textNode.align = "center";
-        textNode.valign = "middle";
-        textNode.width = w;
-        textNode.height = h;
-        btn.addChild(textNode);
+        this.cells.forEach((cell) => cell.destroy());
+        this.cells = [];
 
-        btn.mouseEnabled = true;
-        return btn;
+        const panelX = (this.BASE_W - 320) * 0.5;
+        const panelY = 245;
+
+        const shadow = new Laya.Sprite();
+        shadow.graphics.drawRoundRect(panelX + 6, panelY + 6, 320, 320, 24, "rgba(0,0,0,0.4)");
+        this.gameLayer.addChild(shadow);
+
+        this.panelSprite = new Laya.Sprite();
+        this.panelSprite.size(320, 320);
+        this.panelSprite.pos(panelX, panelY);
+        this.gameLayer.addChild(this.panelSprite);
+
+        this.createImage(this.panelSprite, this.ASSET.gamePanel, 0, 0, 320, 320, "24,24,24,24");
+        this.drawPanelCorners();
+        this.createGridCells();
     }
 
-    private selectDifficulty(size: number): void {
-        Object.keys(this.difficultyBtns).forEach(key => {
-            const btn = this.difficultyBtns[parseInt(key)];
-            const isSelected = parseInt(key) === size;
-            const w = btn.width;
-            const h = btn.height;
-            btn.graphics.clear();
+    private drawPanelCorners(): void {
+        const color = "rgba(139,92,246,0.6)";
+        const corners = [
+            { x: 8, y: 8, p: [["moveTo", 0, 24], ["lineTo", 0, 0], ["lineTo", 24, 0]] },
+            { x: 320 - 32, y: 8, p: [["moveTo", 0, 0], ["lineTo", 24, 0], ["lineTo", 24, 24]] },
+            { x: 8, y: 320 - 32, p: [["moveTo", 0, 0], ["lineTo", 0, 24], ["lineTo", 24, 24]] },
+            { x: 320 - 32, y: 320 - 32, p: [["moveTo", 24, 0], ["lineTo", 24, 24], ["lineTo", 0, 24]] }
+        ];
 
-            if (isSelected) {
-                btn.graphics.drawRoundRect(0, 0, w, h, 8, "#8B5CF6", "#6D28D9", 2);
-            } else {
-                btn.graphics.drawRoundRect(0, 0, w, h, 8, "rgba(255, 255, 255, 0.08)", "rgba(255, 255, 255, 0.2)", 2);
-            }
+        corners.forEach((c) => {
+            const s = new Laya.Sprite();
+            s.graphics.drawPath(0, 0, c.p as any, null, color, 3);
+            s.pos(c.x, c.y);
+            this.panelSprite.addChild(s);
         });
-
-        this._currentSize = size;
-        this._totalNumbers = size * size;
     }
 
-    private createActionButtons(): void {
-        const w = Laya.stage.width;
+    private createGridCells(): void {
+        const sizeCfg = this.GRID_SIZES[this._currentSize];
+        const rows = sizeCfg.rows;
+        const cols = sizeCfg.cols;
+        const spacing = 6;
+        const padding = 16;
 
-        // 设计稿按钮：200x54, bottom: 80px
-        this.startBtn = this.createMainButton("开始游戏", 200, 54);
-        this.startBtn.pos((w - 200) / 2, Laya.stage.height - 134);
+        const cellSize = Math.floor((320 - padding * 2 - spacing * (cols - 1)) / cols);
+        const gridW = cols * cellSize + (cols - 1) * spacing;
+        const gridH = rows * cellSize + (rows - 1) * spacing;
+        const startX = padding + (320 - padding * 2 - gridW) * 0.5;
+        const startY = padding + (320 - padding * 2 - gridH) * 0.5;
+
+        const numbers = this.shuffle(this.range(1, this._totalNumbers));
+        let idx = 0;
+
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const value = numbers[idx++];
+                const cell = new GridCell(value, this._currentNumber);
+                cell.setCellSize(cellSize);
+                cell.pos(startX + c * (cellSize + spacing), startY + r * (cellSize + spacing));
+                cell.on(Event.TOUCH_START, this, () => this.onClickCell(cell));
+                this.panelSprite.addChild(cell);
+                this.cells.push(cell);
+            }
+        }
+
+        this.updateActiveCell();
+    }
+
+    private createStartButton(): void {
+        this.startBtn = new Laya.Sprite();
+        this.startBtn.size(200, 54);
+        this.startBtn.pos((this.BASE_W - 200) * 0.5, this.BASE_H - 80 - 54);
+        this.startBtn.mouseEnabled = true;
+
+        const shadow = new Laya.Sprite();
+        shadow.graphics.drawRoundRect(this.startBtn.x, this.startBtn.y + 2, 200, 54, 27, "rgba(139,92,246,0.34)");
+        this.uiLayer.addChild(shadow);
+
+        this.createImage(this.startBtn, this.ASSET.startBtn, 0, 0, 200, 54, "27,27,27,27");
+
+        const text = new Laya.Text();
+        text.text = "开始游戏";
+        text.font = "Microsoft YaHei";
+        text.fontSize = 20;
+        text.bold = true;
+        text.color = "#FFFFFF";
+        text.stroke = 1;
+        text.strokeColor = "rgba(0,0,0,0.18)";
+        text.width = 200;
+        text.height = 54;
+        text.align = "center";
+        text.valign = "middle";
+        this.startBtn.addChild(text);
+
         this.startBtn.on(Event.TOUCH_START, this, this.onStartGame);
-        this.uiContainer.addChild(this.startBtn);
-
-        // 提示按钮 - 设计稿位置 right:20px, top:185px
-        this.hintBtn = this.createSmallButton("提示: 关", 80, 34);
-        this.hintBtn.pos(w - 100, 185);
-        this.hintBtn.on(Event.TOUCH_START, this, this.onToggleHint);
-        this.uiContainer.addChild(this.hintBtn);
+        this.uiLayer.addChild(this.startBtn);
     }
 
     private createLegend(): void {
-        const w = Laya.stage.width;
-        const legendItems = [
+        const items = [
             { label: "待点", color: "#6366F1" },
             { label: "正确", color: "#FFD700" },
             { label: "错误", color: "#EF4444" }
         ];
 
-        const dotSize = 10;
-        const gap = 16;
         const fontSize = 11;
+        const gap = 16;
+        const dot = 10;
 
-        // 计算整体宽度
-        let totalWidth = 0;
-        legendItems.forEach((item, i) => {
-            // 每个项目：dot + 间距 + 文字
-            const textWidth = item.label.length * fontSize * 0.6;  // 估算文字宽度
-            totalWidth += dotSize + 6 + textWidth;
-            if (i < legendItems.length - 1) totalWidth += gap;
+        let totalW = 0;
+        items.forEach((it, i) => {
+            totalW += dot + 6 + it.label.length * fontSize * 0.6;
+            if (i < items.length - 1) totalW += gap;
         });
 
-        let xOffset = (w - totalWidth) / 2;
-        const y = Laya.stage.height - 20 - fontSize;  // bottom: 20px
+        let x = (this.BASE_W - totalW) * 0.5;
+        const y = this.BASE_H - 20 - fontSize;
 
-        legendItems.forEach((item) => {
-            // 小圆点
-            const dot = new Laya.Sprite();
-            dot.graphics.drawRoundRect(0, 0, dotSize, dotSize, 3, item.color);
-            dot.pos(xOffset, y + fontSize / 2 - dotSize / 2);
-            this.uiContainer.addChild(dot);
+        items.forEach((it) => {
+            const d = new Laya.Sprite();
+            d.graphics.drawRoundRect(0, 0, dot, dot, 3, it.color);
+            d.pos(x, y + (fontSize - dot) * 0.5);
+            this.uiLayer.addChild(d);
+            x += dot + 6;
 
-            xOffset += dotSize + 6;
-
-            // 文字
-            const text = new Laya.Text();
-            text.text = item.label;
-            text.fontSize = fontSize;
-            text.font = "Microsoft YaHei";
-            text.color = "rgba(255, 255, 255, 0.5)";
-            text.pos(xOffset, y);
-            this.uiContainer.addChild(text);
-
-            xOffset += item.label.length * fontSize * 0.6 + gap;
+            const t = new Laya.Text();
+            t.text = it.label;
+            t.font = "Microsoft YaHei";
+            t.fontSize = 11;
+            t.color = "rgba(255,255,255,0.5)";
+            t.pos(x, y);
+            this.uiLayer.addChild(t);
+            x += it.label.length * fontSize * 0.6 + gap;
         });
     }
 
-    private createMainButton(text: string, w: number, h: number): Laya.Sprite {
-        const btn = new Laya.Sprite();
-        btn.size(w, h);
-        btn.mouseEnabled = true;
+    private createPopup(): void {
+        this.popupOverlay = new Laya.Sprite();
+        this.popupOverlay.size(this.BASE_W, this.BASE_H);
+        this.popupOverlay.graphics.drawRect(0, 0, this.BASE_W, this.BASE_H, "rgba(0,0,0,0.65)");
+        this.popupOverlay.alpha = 0;
+        this.popupOverlay.visible = false;
+        this.popupOverlay.mouseEnabled = true;
+        this.popupOverlay.on(Event.TOUCH_START, this, () => { /* consume */ });
 
-        // 设计稿：渐变紫色，圆角27px
-        btn.graphics.drawRoundRect(0, 0, w, h, h/2, "#8B5CF6", "#6D28D9", 2);
-        // 高光
-        btn.graphics.drawRoundRect(4, 4, w - 8, h/2 - 4, h/4, "rgba(255, 255, 255, 0.15)", null, 0);
+        this.popupPanel = new Laya.Sprite();
+        this.popupPanel.size(280, 260);
+        this.popupPanel.pos((this.BASE_W - 280) * 0.5, (this.BASE_H - 260) * 0.5);
+        this.popupPanel.scale(0.8, 0.8);
+        this.popupOverlay.addChild(this.popupPanel);
 
-        const textNode = new Laya.Text();
-        textNode.text = text;
-        textNode.fontSize = 20;
-        textNode.font = "Microsoft YaHei";
-        textNode.bold = true;
-        textNode.color = "#FFFFFF";
-        textNode.stroke = 2;
-        textNode.strokeColor = "rgba(0, 0, 0, 0.2)";
-        textNode.align = "center";
-        textNode.valign = "middle";
-        textNode.width = w;
-        textNode.height = h;
-        btn.addChild(textNode);
-
-        return btn;
-    }
-
-    private createSmallButton(text: string, w: number, h: number): Laya.Sprite {
-        const btn = new Laya.Sprite();
-        btn.size(w, h);
-        btn.mouseEnabled = true;
-
-        btn.graphics.drawRoundRect(0, 0, w, h, h/2, "rgba(255, 255, 255, 0.08)", "rgba(255, 255, 255, 0.2)", 1);
-
-        const textNode = new Laya.Text();
-        textNode.text = text;
-        textNode.fontSize = 12;
-        textNode.font = "Microsoft YaHei";
-        textNode.color = "#FFFFFF";
-        textNode.align = "center";
-        textNode.valign = "middle";
-        textNode.width = w;
-        textNode.height = h;
-        btn.addChild(textNode);
-
-        return btn;
-    }
-
-    private layoutUI(): void {
-        const w = Laya.stage.width;
-        if (this.titleText) {
-            this.titleText.pos(w / 2, 30);
-        }
-    }
-
-    private onStartGame(): void {
-        if (this._isPlaying) return;
-
-        this._currentNumber = 1;
-        this._totalNumbers = this._currentSize * this._currentSize;
-        this._errors = 0;
-        this._startTime = Laya.timer.currTimer;
-        this._isPlaying = true;
-        this._timerRunning = true;
-
-        this.updateTargetDisplay();
-        this.updateErrorDisplay();
-
-        // 隐藏元素
-        Object.values(this.difficultyBtns).forEach(btn => { btn.visible = false; });
-        if (this.startBtn) this.startBtn.visible = false;
-        if (this.hintBtn) this.hintBtn.visible = false;
-        if (this.titleText) this.titleText.visible = false;
-
-        this.createGrid();
-    }
-
-    private createGrid(): void {
-        this.cells.forEach(cell => { cell.off(Event.TOUCH_START, this, null); cell.destroy(); });
-        this.cells = [];
-
-        const gameLayer = this.gridContainer.getChildByName("gameLayer") as Laya.Sprite;
-        if (gameLayer) gameLayer.destroy();
-
-        const gameLayerNew = new Laya.Sprite();
-        gameLayerNew.name = "gameLayer";
-        this.gridContainer.addChild(gameLayerNew);
-
-        // 设计稿：320x320面板, top: 245px
-        const panelSize = 320;
-        const panelX = (Laya.stage.width - panelSize) / 2;
-        const panelY = 245;
-
-        // 面板阴影
-        const shadow = new Laya.Sprite();
-        shadow.graphics.drawRoundRect(panelX + 6, panelY + 6, panelSize, panelSize, 24, "rgba(0, 0, 0, 0.4)");
-        gameLayerNew.addChild(shadow);
-
-        // 面板背景 - 设计稿颜色
-        const panel = new Laya.Sprite();
-        panel.graphics.drawRoundRect(panelX, panelY, panelSize, panelSize, 24, "#1E1B4B", "#312E81", 3);
-        gameLayerNew.addChild(panel);
-
-        // 面板内发光
-        const innerGlow = new Laya.Sprite();
-        innerGlow.graphics.drawRoundRect(panelX + 6, panelY + 6, panelSize - 12, panelSize - 12, 20, null, "rgba(139, 92, 246, 0.25)", 1);
-        gameLayerNew.addChild(innerGlow);
-
-        // 装饰角标
-        this.createPanelDecorations(panelX, panelY, panelSize);
-
-        const { rows, cols } = this.GRID_SIZES[this._currentSize];
-        const spacing = GameScene.CELL_SPACING;  // 6px
-        const padding = 16;
-        const cellSize = Math.floor((panelSize - padding * 2 - spacing * (cols - 1)) / cols);
-
-        const gridW = cols * cellSize + (cols - 1) * spacing;
-        const gridH = rows * cellSize + (rows - 1) * spacing;
-        const startX = panelX + padding + (panelSize - padding * 2 - gridW) / 2;
-        const startY = panelY + padding + (panelSize - padding * 2 - gridH) / 2;
-
-        const numbers = this.generateNumbers(this._totalNumbers);
-        const shuffled = this.fisherYatesShuffle(numbers);
-
-        let index = 0;
-        for (let row = 0; row < rows; row++) {
-            for (let col = 0; col < cols; col++) {
-                const number = shuffled[index++];
-                const cell = new GridCell(number, this._currentNumber);
-                cell.setCellSize(cellSize);
-                cell.x = startX + col * (cellSize + spacing);
-                cell.y = startY + row * (cellSize + spacing);
-                cell.on(Event.TOUCH_START, this, (e: Event) => { this.onCellClick(cell); });
-                gameLayerNew.addChild(cell);
-                this.cells.push(cell);
-            }
-        }
-
-        // 设置当前目标高亮
-        this.updateActiveCell();
-    }
-
-    private createPanelDecorations(x: number, y: number, size: number): void {
-        const gameLayer = this.gridContainer.getChildByName("gameLayer") as Laya.Sprite;
-        if (!gameLayer) return;
-
-        const cornerSize = 24;
-        const cornerColor = "rgba(139, 92, 246, 0.6)";
-
-        // 左上
-        const tl = new Laya.Sprite();
-        tl.graphics.drawPath(0, 0, [["moveTo", 0, cornerSize], ["lineTo", 0, 0], ["lineTo", cornerSize, 0]], null, cornerColor);
-        tl.pos(x + 8, y + 8);
-        gameLayer.addChild(tl);
-
-        // 右上
-        const tr = new Laya.Sprite();
-        tr.graphics.drawPath(0, 0, [["moveTo", 0, 0], ["lineTo", cornerSize, 0], ["lineTo", cornerSize, cornerSize]], null, cornerColor);
-        tr.pos(x + size - 8 - cornerSize, y + 8);
-        gameLayer.addChild(tr);
-
-        // 左下
-        const bl = new Laya.Sprite();
-        bl.graphics.drawPath(0, 0, [["moveTo", 0, 0], ["lineTo", 0, cornerSize], ["lineTo", cornerSize, cornerSize]], null, cornerColor);
-        bl.pos(x + 8, y + size - 8 - cornerSize);
-        gameLayer.addChild(bl);
-
-        // 右下
-        const br = new Laya.Sprite();
-        br.graphics.drawPath(0, 0, [["moveTo", cornerSize, 0], ["lineTo", cornerSize, cornerSize], ["lineTo", 0, cornerSize]], null, cornerColor);
-        br.pos(x + size - 8 - cornerSize, y + size - 8 - cornerSize);
-        gameLayer.addChild(br);
-    }
-
-    private generateNumbers(count: number): number[] {
-        const numbers: number[] = [];
-        for (let i = 1; i <= count; i++) { numbers.push(i); }
-        return numbers;
-    }
-
-    private fisherYatesShuffle(array: number[]): number[] {
-        const result = [...array];
-        for (let i = result.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [result[i], result[j]] = [result[j], result[i]];
-        }
-        return result;
-    }
-
-    private updateActiveCell(): void {
-        // 清除之前的active状态
-        this.cells.forEach(cell => cell.setHighlight(false));
-
-        // 设置当前目标高亮
-        const activeCell = this.cells.find(c => c.getNumber() === this._currentNumber);
-        if (activeCell) {
-            activeCell.setHighlight(true);
-        }
-    }
-
-    private onCellClick(cell: GridCell): void {
-        if (!this._isPlaying) return;
-
-        const number = cell.getNumber();
-        if (number === this._currentNumber) {
-            this.onCorrectClick(cell);
-        } else {
-            this.onErrorClick(cell);
-        }
-    }
-
-    private onCorrectClick(cell: GridCell): void {
-        cell.markCompleted();
-        this.playCorrectEffect(cell);
-        this._currentNumber++;
-
-        if (this._currentNumber > this._totalNumbers) {
-            this.onGameCompleted();
-        } else {
-            this.updateTargetDisplay();
-            this.updateActiveCell();
-        }
-    }
-
-    private onErrorClick(cell: GridCell): void {
-        this._errors++;
-        this.updateErrorDisplay();
-        cell.showError();
-        this.playErrorEffect();
-        this.showCenterText("错误!", "#FF6B6B", 600);
-    }
-
-    private playCorrectEffect(cell: GridCell): void {
-        const glow = new Laya.Sprite();
-        const size = cell.width + 30;
-        glow.graphics.drawCircle(size/2, size/2, size/2, "rgba(139, 92, 246, 0.4)");
-        glow.size(size, size);
-        glow.pivot(size/2, size/2);
-        glow.pos(cell.x + cell.width/2, cell.y + cell.height/2);
-        const gameLayer = this.gridContainer.getChildByName("gameLayer") as Laya.Sprite;
-        if (gameLayer) {
-            gameLayer.addChild(glow);
-            Laya.Tween.to(glow, { scaleX: 1.5, scaleY: 1.5, alpha: 0 }, 400, null,
-                Laya.Handler.create(this, () => glow.destroy()));
-        }
-    }
-
-    private playErrorEffect(): void {
-        if (this.gridContainer) {
-            const originalX = this.gridContainer.x;
-            Laya.Tween.to(this.gridContainer, { x: originalX - 8 }, 50, null,
-                Laya.Handler.create(this, () => {
-                    Laya.Tween.to(this.gridContainer, { x: originalX + 8 }, 50, null,
-                        Laya.Handler.create(this, () => {
-                            Laya.Tween.to(this.gridContainer, { x: originalX - 4 }, 50, null,
-                                Laya.Handler.create(this, () => {
-                                    Laya.Tween.to(this.gridContainer, { x: originalX }, 50, null);
-                                }));
-                        }));
-                }));
-        }
-    }
-
-    private updateTargetDisplay(): void {
-        if (this.targetText) {
-            this.targetText.text = this._currentNumber + "";
-        }
-    }
-
-    private updateErrorDisplay(): void {
-        if (this.errorText) {
-            this.errorText.text = this._errors.toString();
-        }
-    }
-
-    private updateTimer(): void {
-        if (!this._isPlaying || !this._timerRunning) return;
-        const elapsed = Laya.timer.currTimer - this._startTime;
-        const timeStr = this.formatTime(elapsed);
-        if (this.timerText) this.timerText.text = timeStr;
-    }
-
-    private formatTime(ms: number): string {
-        const minutes = Math.floor(ms / 60000);
-        const seconds = Math.floor((ms % 60000) / 1000);
-        return minutes.toString().padStart(2, "0") + ":" + seconds.toString().padStart(2, "0");
-    }
-
-    private onGameCompleted(): void {
-        this._isPlaying = false;
-        this._timerRunning = false;
-        const elapsed = Laya.timer.currTimer - this._startTime;
-        this.playCompletionEffect();
-        this.showCompletePopup(elapsed);
-    }
-
-    private playCompletionEffect(): void {
-        const colors = ["#FFD700", "#FF6B6B", "#4FC3F7", "#A78BFA", "#4ADE80"];
-        for (let i = 0; i < 15; i++) {
-            const particle = new Laya.Sprite();
-            const size = 8 + Math.random() * 8;
-            particle.graphics.drawCircle(size/2, size/2, size/2, colors[i % colors.length]);
-            particle.size(size, size);
-            particle.pos(Math.random() * Laya.stage.width, Laya.stage.height * 0.3 + Math.random() * 100);
-            this.fxContainer.addChild(particle);
-
-            Laya.Tween.to(particle, {
-                y: particle.y + 150 + Math.random() * 100,
-                x: particle.x + (Math.random() - 0.5) * 100,
-                alpha: 0,
-                rotation: Math.random() * 360
-            }, 800 + Math.random() * 400, null, Laya.Handler.create(this, () => particle.destroy()));
-        }
-    }
-
-    private showCompletePopup(timeMs: number): void {
-        const w = Laya.stage.width;
-        const popupW = 280;
-        const popupH = 200;
-        const popupX = (w - popupW) / 2;
-        const popupY = (Laya.stage.height - popupH) / 2;
-
-        const overlay = new Laya.Sprite();
-        overlay.graphics.drawRect(0, 0, Laya.stage.width, Laya.stage.height, "rgba(0, 0, 0, 0.65)");
-        overlay.on(Event.TOUCH_START, this, () => {});
-        this.fxContainer.addChild(overlay);
-
-        const panel = new Laya.Sprite();
-        panel.pos(popupX, popupY);
-        panel.graphics.drawRoundRect(0, 0, popupW, popupH, 20, "#1E1B4B", "#4C1D95", 3);
-        this.fxContainer.addChild(panel);
+        this.createImage(this.popupPanel, this.ASSET.popupPanel, 0, 0, 280, 260, "20,20,20,20");
 
         const title = new Laya.Text();
+        title.name = "popup_title";
         title.text = "挑战完成!";
-        title.fontSize = 28;
         title.font = "Microsoft YaHei";
+        title.fontSize = 28;
         title.bold = true;
         title.color = "#FFD700";
-        title.stroke = 2;
-        title.strokeColor = "rgba(0, 0, 0, 0.3)";
+        title.width = 280;
         title.align = "center";
-        title.pos(popupW / 2, 24);
-        panel.addChild(title);
+        title.pos(0, 24);
+        this.popupPanel.addChild(title);
 
-        const elapsedSec = Math.floor(timeMs / 1000);
-        const resultText = new Laya.Text();
-        resultText.text = `用时: ${elapsedSec}秒\n错误: ${this._errors}次`;
-        resultText.fontSize = 16;
-        resultText.font = "Microsoft YaHei";
-        resultText.color = "#E0E7FF";
-        resultText.align = "center";
-        resultText.leading = 8;
-        resultText.pos(popupW / 2, 75);
-        panel.addChild(resultText);
+        const result = new Laya.Text();
+        result.name = "popup_result";
+        result.text = "用时: 0秒\n错误: 0次";
+        result.font = "Microsoft YaHei";
+        result.fontSize = 16;
+        result.color = "#E0E7FF";
+        result.leading = 8;
+        result.width = 280;
+        result.align = "center";
+        result.pos(0, 82);
+        this.popupPanel.addChild(result);
 
-        const btnW = 140;
-        const btnH = 44;
         const btn = new Laya.Sprite();
-        btn.pos((popupW - btnW) / 2, 140);
-        btn.graphics.drawRoundRect(0, 0, btnW, btnH, 22, "#8B5CF6", "#6D28D9", 2);
+        btn.size(140, 44);
+        btn.pos((280 - 140) * 0.5, 190);
         btn.mouseEnabled = true;
-        panel.addChild(btn);
+        btn.on(Event.TOUCH_START, this, this.onClosePopupAndReset);
+        this.popupPanel.addChild(btn);
+
+        this.createImage(btn, this.ASSET.popupBtn, 0, 0, 140, 44, "22,22,22,22");
 
         const btnText = new Laya.Text();
         btnText.text = "再来一局";
-        btnText.fontSize = 16;
         btnText.font = "Microsoft YaHei";
+        btnText.fontSize = 16;
         btnText.bold = true;
         btnText.color = "#FFFFFF";
+        btnText.width = 140;
+        btnText.height = 44;
         btnText.align = "center";
         btnText.valign = "middle";
-        btnText.width = btnW;
-        btnText.height = btnH;
         btn.addChild(btnText);
 
-        btn.on(Event.TOUCH_START, this, this.onRestartFromResult);
+        this.fxLayer.addChild(this.popupOverlay);
     }
 
-    private onRestartFromResult(): void {
-        this.clearPopup();
-        Object.values(this.difficultyBtns).forEach(btn => { btn.visible = true; });
-        if (this.startBtn) this.startBtn.visible = true;
-        if (this.hintBtn) this.hintBtn.visible = true;
-        if (this.titleText) this.titleText.visible = true;
-        this.onResetGame();
+    private createImage(parent: Laya.Sprite, skin: string, x: number, y: number, w: number, h: number, sizeGrid?: string): Laya.Sprite {
+        const img = new Laya.Sprite();
+        img.pos(x, y);
+        img.size(w, h);
+        this.loadSpriteSkin(img, skin, w, h);
+        parent.addChild(img);
+        return img;
     }
 
-    private clearPopup(): void {
-        this.fxContainer.removeChildren();
+    private loadSpriteSkin(sp: Laya.Sprite, relPath: string, w: number, h: number, x: number = 0, y: number = 0): void {
+        const candidates = this.makeCandidates(relPath);
+        this.tryLoadSprite(sp, candidates, 0, w, h, x, y);
     }
 
-    private onResetGame(): void {
-        this._isPlaying = false;
-        this._timerRunning = false;
-        this._currentNumber = 1;
-        this._errors = 0;
-        this._startTime = 0;
+    private tryLoadSprite(sp: Laya.Sprite, candidates: string[], index: number, w: number, h: number, x: number, y: number): void {
+        if (index >= candidates.length) {
+            return;
+        }
+        const path = candidates[index];
+        sp.off(Event.ERROR, this, null);
+        sp.once(Event.ERROR, this, () => {
+            this.tryLoadSprite(sp, candidates, index + 1, w, h, x, y);
+        });
+        sp.loadImage(path, x, y, w, h, Laya.Handler.create(this, () => {
+            if (!sp.texture) {
+                this.tryLoadSprite(sp, candidates, index + 1, w, h, x, y);
+            }
+        }));
+    }
 
-        const gameLayer = this.gridContainer.getChildByName("gameLayer") as Laya.Sprite;
-        if (gameLayer) gameLayer.destroy();
-        this.cells = [];
+    private makeCandidates(rel: string): string[] {
+        return [
+            rel,
+            `assets/${rel}`,
+            `assets/resources/${rel}`,
+            `resources/${rel}`
+        ];
+    }
 
-        if (this.targetText) this.targetText.text = "1";
-        if (this.timerText) this.timerText.text = "00:00";
-        if (this.errorText) this.errorText.text = "0";
+    private onSelectDifficulty(size: number): void {
+        if (size !== 3 && size !== 4 && size !== 5) return;
+
+        this._currentSize = size;
+        this._totalNumbers = size * size;
+
+        Object.keys(this.difficultyBtns).forEach((k) => {
+            const key = Number(k);
+            this.paintDifficultyBtn(this.difficultyBtns[key], key === size);
+        });
+
+        this.resetRunState(false);
+        this.createGamePanelAndGrid();
     }
 
     private onToggleHint(): void {
         this._showHints = !this._showHints;
-        if (this.hintBtn) {
-            const text = this._showHints ? "提示: 开" : "提示: 关";
-            (this.hintBtn.getChildAt(0) as Laya.Text).text = text;
+        this.hintBtnText.text = this._showHints ? "提示: 开" : "提示: 关";
+        this.updateActiveCell();
+    }
+
+    private onStartGame(): void {
+        this.resetRunState(true);
+        this.createGamePanelAndGrid();
+
+        Laya.Tween.clearAll(this.startBtn);
+        this.startBtn.scale(1, 1);
+        Laya.Tween.to(this.startBtn, { scaleX: 0.97, scaleY: 0.97 }, 70, null, Laya.Handler.create(this, () => {
+            Laya.Tween.to(this.startBtn, { scaleX: 1, scaleY: 1 }, 90);
+        }));
+    }
+
+    private onClickCell(cell: GridCell): void {
+        if (!this._isPlaying) return;
+
+        cell.playPressFeedback();
+        const value = cell.getNumber();
+
+        if (value === this._currentNumber) {
+            this.onCorrect(cell);
+        } else {
+            this.onWrong(cell);
         }
     }
 
-    private showCenterText(text: string, color: string, duration: number): void {
-        const w = Laya.stage.width;
-        const textNode = new Laya.Text();
-        textNode.text = text;
-        textNode.fontSize = 28;
-        textNode.font = "Microsoft YaHei";
-        textNode.bold = true;
-        textNode.color = color;
-        textNode.stroke = 3;
-        textNode.strokeColor = "rgba(0, 0, 0, 0.5)";
-        textNode.align = "center";
-        textNode.pos(w / 2, Laya.stage.height / 2);
-        this.fxContainer.addChild(textNode);
-        Laya.timer.once(duration, this, () => { textNode.destroy(); });
+    private onCorrect(cell: GridCell): void {
+        if (cell.isLocked()) return;
+
+        cell.markCompleted();
+        this._currentNumber++;
+        this.updateTargetDisplay();
+
+        if (this._currentNumber > this._totalNumbers) {
+            this._isPlaying = false;
+            this.showPopup();
+            return;
+        }
+
+        this.updateActiveCell();
+    }
+
+    private onWrong(cell: GridCell): void {
+        this._errors++;
+        this.updateErrorDisplay();
+        cell.showError();
+
+        const ox = this.root.x;
+        Laya.Tween.to(this.root, { x: ox - 4 }, 40, null, Laya.Handler.create(this, () => {
+            Laya.Tween.to(this.root, { x: ox + 4 }, 40, null, Laya.Handler.create(this, () => {
+                Laya.Tween.to(this.root, { x: ox }, 40);
+            }));
+        }));
+    }
+
+    private updateActiveCell(): void {
+        this.cells.forEach((cell) => {
+            const isActive = cell.getNumber() === this._currentNumber && !cell.isLocked();
+            cell.setHighlight(isActive);
+        });
+    }
+
+    private updateTargetDisplay(): void {
+        const current = Math.min(this._currentNumber, this._totalNumbers);
+        this.targetText.text = String(current);
+    }
+
+    private updateErrorDisplay(): void {
+        this.errorText.text = String(this._errors);
+    }
+
+    private updateTimer(): void {
+        if (!this._isPlaying) return;
+        const elapsed = Math.max(0, Laya.timer.currTimer - this._startTime);
+        this.timerText.text = this.formatTime(elapsed);
+    }
+
+    private formatTime(ms: number): string {
+        const totalSec = Math.floor(ms / 1000);
+        const mm = Math.floor(totalSec / 60).toString().padStart(2, "0");
+        const ss = (totalSec % 60).toString().padStart(2, "0");
+        return `${mm}:${ss}`;
+    }
+
+    private showPopup(): void {
+        const elapsedSec = Math.floor((Laya.timer.currTimer - this._startTime) / 1000);
+        const result = this.popupPanel.getChildByName("popup_result") as Laya.Text;
+        if (result) {
+            result.text = `用时: ${elapsedSec}秒\n错误: ${this._errors}次`;
+        }
+
+        this.popupOverlay.visible = true;
+        this.popupOverlay.alpha = 0;
+        this.popupPanel.scale(0.8, 0.8);
+
+        Laya.Tween.to(this.popupOverlay, { alpha: 1 }, 220);
+        Laya.Tween.to(this.popupPanel, { scaleX: 1, scaleY: 1 }, 260, Laya.Ease.backOut);
+    }
+
+    private onClosePopupAndReset(): void {
+        Laya.Tween.to(this.popupOverlay, { alpha: 0 }, 180, null, Laya.Handler.create(this, () => {
+            this.popupOverlay.visible = false;
+            this.resetRunState(false);
+            this.createGamePanelAndGrid();
+        }));
+    }
+
+    private resetRunState(startImmediately: boolean): void {
+        this._currentNumber = 1;
+        this._errors = 0;
+        this.updateTargetDisplay();
+        this.updateErrorDisplay();
+        this.timerText.text = "00:00";
+
+        this._isPlaying = startImmediately;
+        this._startTime = startImmediately ? Laya.timer.currTimer : 0;
+    }
+
+    private onResize(): void {
+        this.applyLayoutScale();
+        this.refreshStageBackground();
+    }
+
+    private range(from: number, to: number): number[] {
+        const list: number[] = [];
+        for (let i = from; i <= to; i++) {
+            list.push(i);
+        }
+        return list;
+    }
+
+    private shuffle(list: number[]): number[] {
+        const a = [...list];
+        for (let i = a.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
     }
 
     onDestroy(): void {
         Laya.timer.clear(this, this.updateTimer);
-        this.cells.forEach(cell => cell.destroy());
+        Laya.stage.off(Event.RESIZE, this, this.onResize);
+        this.cells.forEach((c) => c.destroy());
         this.cells = [];
     }
 }

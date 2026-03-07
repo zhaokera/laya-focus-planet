@@ -1,6 +1,5 @@
 /**
- * 舒尔特方格格子组件
- * 星空紫蓝主题样式 - 完全匹配设计稿
+ * 舒尔特方格格子组件（贴图驱动）
  */
 export class GridCell extends Laya.Sprite {
     private _number: number = 0;
@@ -9,8 +8,21 @@ export class GridCell extends Laya.Sprite {
     private _cellSize: number = 56;
     private _state: "idle" | "correct" | "error" | "active" = "idle";
 
-    private readonly numberLabel: Laya.Text = new Laya.Text();
-    private glowSprite: Laya.Sprite = null;
+    private readonly ASSET = {
+        idle: "ui/game_design/cell_normal.png",
+        active: "ui/game_design/cell_active.png",
+        correct: "ui/game_design/cell_correct.png",
+        error: "ui/game_design/cell_wrong.png",
+        glowPurple: "ui/game_design/glow_purple.png",
+        glowGold: "ui/game_design/glow_gold.png",
+        glowRed: "ui/game_design/glow_red.png"
+    };
+
+    private bgImage: Laya.Sprite = new Laya.Sprite();
+    private glowImage: Laya.Sprite = new Laya.Sprite();
+    private numberLabel: Laya.Text = new Laya.Text();
+
+    private pulseHandler: (() => void) | null = null;
 
     constructor(number: number, expected: number) {
         super();
@@ -22,68 +34,39 @@ export class GridCell extends Laya.Sprite {
     private initCell(): void {
         this.mouseEnabled = true;
 
-        // 创建发光层
-        this.glowSprite = new Laya.Sprite();
-        this.addChild(this.glowSprite);
+        this.loadSkin(this.glowImage, this.ASSET.glowPurple, 128, 128);
+        this.glowImage.alpha = 0.0;
+        this.addChild(this.glowImage);
 
-        this.addChild(this.numberLabel);
+        this.loadSkin(this.bgImage, this.ASSET.idle, this._cellSize, this._cellSize);
+        this.addChild(this.bgImage);
+
         this.numberLabel.align = "center";
         this.numberLabel.valign = "middle";
         this.numberLabel.bold = true;
         this.numberLabel.font = "Microsoft YaHei";
+        this.addChild(this.numberLabel);
+
         this.refreshVisual();
     }
 
     public setCellSize(size: number): void {
         this._cellSize = Math.max(40, Math.floor(size));
         this.size(this._cellSize, this._cellSize);
+
+        this.bgImage.size(this._cellSize, this._cellSize);
+        this.loadSkin(this.bgImage, this.getBgSkinByState(), this._cellSize, this._cellSize);
+
+        const glowSize = Math.floor(this._cellSize * 1.45);
+        this.glowImage.size(glowSize, glowSize);
+        this.glowImage.pos((this._cellSize - glowSize) * 0.5, (this._cellSize - glowSize) * 0.5);
+
         this.refreshVisual();
     }
 
-    public setActive(isActive: boolean): void {
-        if (isActive && this._state === "idle") {
-            this._state = "active";
-            this.refreshVisual();
-            this.startPulseAnimation();
-        } else if (!isActive && this._state === "active") {
-            this._state = "idle";
-            this.stopPulseAnimation();
-            this.refreshVisual();
-        }
-    }
-
-    private pulseTween: any = null;
-    private _lastScale: number = 1;
-
-    private startPulseAnimation(): void {
-        if (this.pulseTween) return;
-        this._lastScale = 1;
-        this.pulseTween = Laya.timer.frameLoop(1, this, () => {
-            if (this._state !== "active") {
-                this.stopPulseAnimation();
-                return;
-            }
-            const time = Laya.timer.currTimer;
-            const scale = 1 + Math.sin(time * 0.006) * 0.03;
-            if (Math.abs(scale - this._lastScale) > 0.001) {
-                this.scale(scale, scale);
-                this._lastScale = scale;
-            }
-        });
-    }
-
-    private stopPulseAnimation(): void {
-        if (this.pulseTween) {
-            Laya.timer.clear(this, this.pulseTween);
-            this.pulseTween = null;
-        }
-        this.scale(1, 1);
-    }
-
     public playPressFeedback(): void {
-        if (this._isLocked) {
-            return;
-        }
+        if (this._isLocked) return;
+
         Laya.Tween.clearAll(this);
         this.scale(1, 1);
         Laya.Tween.to(this, { scaleX: 0.95, scaleY: 0.95 }, 60, null, Laya.Handler.create(this, () => {
@@ -104,11 +87,13 @@ export class GridCell extends Laya.Sprite {
                 resolve();
                 return;
             }
+
             this._state = "error";
             this.refreshVisual();
+
             Laya.Tween.clearAll(this);
             this.scale(1, 1);
-            Laya.Tween.to(this, { scaleX: 1.06, scaleY: 1.06 }, 70, null, Laya.Handler.create(this, () => {
+            Laya.Tween.to(this, { scaleX: 1.05, scaleY: 1.05 }, 70, null, Laya.Handler.create(this, () => {
                 Laya.Tween.to(this, { scaleX: 1, scaleY: 1 }, 90, null, Laya.Handler.create(this, () => {
                     this._state = "idle";
                     this.refreshVisual();
@@ -118,77 +103,10 @@ export class GridCell extends Laya.Sprite {
         });
     }
 
-    public reset(number: number, expected: number): void {
-        this._number = number;
-        this._expected = expected;
-        this._isLocked = false;
-        this._state = "idle";
-        this.stopPulseAnimation();
-        this.refreshVisual();
-    }
-
-    private refreshVisual(): void {
-        const size = this._cellSize;
-        this.graphics.clear();
-        this.glowSprite.graphics.clear();
-
-        // 设计稿配色
-        if (this._state === "correct") {
-            // 正确态 - 金色
-            this.graphics.drawRoundRect(0, 0, size, size, 10, "#854D0E", "#CA8A04", 2);
-            this.graphics.drawRoundRect(3, 3, size - 6, size - 6, 8, "#1E3A5F", null, 0);
-            // 发光
-            this.glowSprite.graphics.drawCircle(size/2, size/2, size * 0.65, "rgba(251, 191, 36, 0.35)");
-            this.setLabelStyle("#FEF08A", true);
-        } else if (this._state === "error") {
-            // 错误态 - 红色
-            this.graphics.drawRoundRect(0, 0, size, size, 10, "#991B1B", "#EF4444", 2);
-            this.graphics.drawRoundRect(3, 3, size - 6, size - 6, 8, "#450A0A", null, 0);
-            // 发光
-            this.glowSprite.graphics.drawCircle(size/2, size/2, size * 0.65, "rgba(248, 113, 113, 0.35)");
-            this.setLabelStyle("#FECACA", true);
-        } else if (this._state === "active") {
-            // 当前目标态 - 紫色高亮边框
-            this.graphics.drawRoundRect(0, 0, size, size, 10, "#4338CA", "#A78BFA", 3);
-            this.graphics.drawRoundRect(3, 3, size - 6, size - 6, 8, "#1E1B4B", null, 0);
-            // 发光
-            this.glowSprite.graphics.drawCircle(size/2, size/2, size * 0.55, "rgba(167, 139, 250, 0.4)");
-            this.setLabelStyle("#E0E7FF", true);
-        } else {
-            // 普通态 - 紫色
-            this.graphics.drawRoundRect(0, 0, size, size, 10, "#3730A3", "#6366F1", 2);
-            this.graphics.drawRoundRect(3, 3, size - 6, size - 6, 8, "#1E1B4B", null, 0);
-            // 微弱发光
-            this.glowSprite.graphics.drawCircle(size/2, size/2, size * 0.4, "rgba(165, 180, 252, 0.1)");
-            this.setLabelStyle("#E0E7FF", false);
-        }
-
-        // 更新数字
-        this.numberLabel.text = this._number.toString();
-        this.numberLabel.fontSize = Math.max(16, Math.floor(size * 0.38));
-        this.numberLabel.width = size;
-        this.numberLabel.height = size;
-        this.numberLabel.x = 0;
-        this.numberLabel.y = 0;
-    }
-
-    private setLabelStyle(color: string, glow: boolean): void {
-        this.numberLabel.color = color;
-        if (glow) {
-            this.numberLabel.stroke = 3;
-            this.numberLabel.strokeColor = "rgba(0, 0, 0, 0.4)";
-        } else {
-            this.numberLabel.stroke = 2;
-            this.numberLabel.strokeColor = "rgba(0, 0, 0, 0.3)";
-        }
-    }
-
-    public getNumber(): number { return this._number; }
-    public isLocked(): boolean { return this._isLocked; }
-    public getExpectedNumber(): number { return this._expected; }
-
     public setHighlight(highlight: boolean): void {
-        if (highlight && !this._isLocked && this._state !== "active") {
+        if (this._isLocked) return;
+
+        if (highlight && this._state !== "active") {
             this._state = "active";
             this.startPulseAnimation();
             this.refreshVisual();
@@ -197,5 +115,114 @@ export class GridCell extends Laya.Sprite {
             this.stopPulseAnimation();
             this.refreshVisual();
         }
+    }
+
+    private startPulseAnimation(): void {
+        if (this.pulseHandler) return;
+
+        this.pulseHandler = () => {
+            if (this._state !== "active") {
+                this.stopPulseAnimation();
+                return;
+            }
+            const t = Laya.timer.currTimer;
+            const s = 1 + Math.sin(t * 0.006) * 0.03;
+            this.scale(s, s);
+        };
+
+        Laya.timer.frameLoop(1, this, this.pulseHandler);
+    }
+
+    private stopPulseAnimation(): void {
+        if (this.pulseHandler) {
+            Laya.timer.clear(this, this.pulseHandler);
+            this.pulseHandler = null;
+        }
+        this.scale(1, 1);
+    }
+
+    private refreshVisual(): void {
+        if (this._state === "correct") {
+            this.loadSkin(this.bgImage, this.ASSET.correct, this._cellSize, this._cellSize);
+            this.loadSkin(this.glowImage, this.ASSET.glowGold, this.glowImage.width, this.glowImage.height);
+            this.glowImage.alpha = 0.82;
+            this.setLabelStyle("#FEF08A", true);
+        } else if (this._state === "error") {
+            this.loadSkin(this.bgImage, this.ASSET.error, this._cellSize, this._cellSize);
+            this.loadSkin(this.glowImage, this.ASSET.glowRed, this.glowImage.width, this.glowImage.height);
+            this.glowImage.alpha = 0.82;
+            this.setLabelStyle("#FECACA", true);
+        } else if (this._state === "active") {
+            this.loadSkin(this.bgImage, this.ASSET.active, this._cellSize, this._cellSize);
+            this.loadSkin(this.glowImage, this.ASSET.glowPurple, this.glowImage.width, this.glowImage.height);
+            this.glowImage.alpha = 0.66;
+            this.setLabelStyle("#E0E7FF", true);
+        } else {
+            this.loadSkin(this.bgImage, this.ASSET.idle, this._cellSize, this._cellSize);
+            this.loadSkin(this.glowImage, this.ASSET.glowPurple, this.glowImage.width, this.glowImage.height);
+            this.glowImage.alpha = 0.18;
+            this.setLabelStyle("#E0E7FF", false);
+        }
+
+        this.numberLabel.text = String(this._number);
+        this.numberLabel.fontSize = Math.max(16, Math.floor(this._cellSize * 0.35));
+        this.numberLabel.width = this._cellSize;
+        this.numberLabel.height = this._cellSize;
+        this.numberLabel.pos(0, 0);
+    }
+
+    private setLabelStyle(color: string, emphasized: boolean): void {
+        this.numberLabel.color = color;
+        this.numberLabel.stroke = emphasized ? 3 : 2;
+        this.numberLabel.strokeColor = emphasized ? "rgba(0,0,0,0.30)" : "rgba(0,0,0,0.26)";
+    }
+
+    public getNumber(): number {
+        return this._number;
+    }
+
+    public isLocked(): boolean {
+        return this._isLocked;
+    }
+
+    public getExpectedNumber(): number {
+        return this._expected;
+    }
+
+    private getBgSkinByState(): string {
+        if (this._state === "correct") return this.ASSET.correct;
+        if (this._state === "error") return this.ASSET.error;
+        if (this._state === "active") return this.ASSET.active;
+        return this.ASSET.idle;
+    }
+
+    private loadSkin(sp: Laya.Sprite, relPath: string, w: number, h: number): void {
+        const candidates = this.makeCandidates(relPath);
+        this.tryLoad(sp, candidates, 0, w, h);
+    }
+
+    private tryLoad(sp: Laya.Sprite, candidates: string[], index: number, w: number, h: number): void {
+        if (index >= candidates.length) {
+            return;
+        }
+        const path = candidates[index];
+        sp.off(Laya.Event.ERROR, this, null);
+        sp.once(Laya.Event.ERROR, this, () => {
+            this.tryLoad(sp, candidates, index + 1, w, h);
+        });
+        sp.loadImage(path, 0, 0, w, h, Laya.Handler.create(this, () => {
+            if (!sp.texture) {
+                this.tryLoad(sp, candidates, index + 1, w, h);
+            }
+        }));
+    }
+
+    private makeCandidates(rel: string): string[] {
+        return [
+            rel,
+            `assets/${rel}`,
+            `assets/resources/${rel}`,
+            `resources/${rel}`
+        ];
     }
 }
