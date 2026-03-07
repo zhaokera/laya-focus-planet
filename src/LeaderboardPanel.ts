@@ -144,30 +144,25 @@ export class LeaderboardPanel extends Laya.Scene {
     }
 
     private createPanelBackground(panelW: number, panelH: number): void {
-        // 面板阴影 - 在面板下方
+        // 面板阴影 - 更大更明显，向下偏移
         const shadow = new Laya.Sprite();
-        shadow.graphics.drawRoundRect(6, 6, panelW, panelH, 24, "rgba(0,0,0,0.4)");
+        shadow.graphics.drawRoundRect(6, 12, panelW, panelH, 24, "rgba(0,0,0,0.5)");
         this.panelContainer.addChild(shadow);
 
-        // 面板主体 - 圆角矩形背景
+        // 面板主体 - 带边框的圆角矩形
         const panelBg = new Laya.Sprite();
         panelBg.size(panelW, panelH);
         const g = panelBg.graphics;
-        this.drawRoundRect(g, 0, 0, panelW, panelH, 24, this.COLORS.panelBg);
+        // 使用原生 drawRoundRect: (x, y, width, height, radius, fillColor, lineColor, lineWidth)
+        g.drawRoundRect(0, 0, panelW, panelH, 24,
+            "rgba(255,255,255,0.08)",   // 填充色 - 稍微提高可见度
+            "rgba(255,255,255,0.15)",   // 边框色
+            1                            // 边框宽度
+        );
         this.panelContainer.addChild(panelBg);
 
         // 装饰性边角
         this.drawPanelCorners(panelBg, panelW, panelH);
-    }
-
-    private drawRoundRect(g: Laya.Graphics, x: number, y: number, w: number, h: number, r: number, color: string): void {
-        // 简化的圆角矩形
-        g.drawRect(x + r, y, w - 2 * r, h, color);
-        g.drawRect(x, y + r, w, h - 2 * r, color);
-        g.drawCircle(x + r, y + r, r, color);
-        g.drawCircle(x + w - r, y + r, r, color);
-        g.drawCircle(x + r, y + h - r, r, color);
-        g.drawCircle(x + w - r, y + h - r, r, color);
     }
 
     private drawPanelCorners(panel: Laya.Sprite, w: number, h: number): void {
@@ -268,12 +263,19 @@ export class LeaderboardPanel extends Laya.Scene {
         g.clear();
 
         if (active) {
-            // 激活状态 - 金色渐变背景
-            g.drawRoundRect(0, 0, tab.width, tab.height, 16, "rgba(255,215,0,0.15)");
-            // 边框
-            g.drawLine(0, tab.height - 1, tab.width, tab.height - 1, "rgba(255,215,0,0.4)", 2);
+            // 激活状态 - 金色背景 + 边框
+            g.drawRoundRect(0, 0, tab.width, tab.height, 16,
+                "rgba(255,215,0,0.2)",
+                "rgba(255,215,0,0.5)",
+                1
+            );
         } else {
-            g.drawRoundRect(0, 0, tab.width, tab.height, 16, "rgba(255,255,255,0.05)");
+            // 非激活状态 - 半透明背景 + 边框
+            g.drawRoundRect(0, 0, tab.width, tab.height, 16,
+                "rgba(255,255,255,0.05)",
+                "rgba(255,255,255,0.1)",
+                1
+            );
         }
     }
 
@@ -398,18 +400,18 @@ export class LeaderboardPanel extends Laya.Scene {
                 : rankType === "silver"
                     ? "rgba(192,192,192,0.12)"
                     : "rgba(205,127,50,0.12)";
-            this.drawRoundRect(g, 0, 0, w, h, 12, bgColor);
 
-            // 发光边框效果
             const borderColor = rankType === "gold"
                 ? "rgba(255,215,0,0.3)"
                 : rankType === "silver"
                     ? "rgba(192,192,192,0.3)"
                     : "rgba(205,127,50,0.3)";
-            g.drawLine(0, 0, w, 0, borderColor, 1);
-            g.drawLine(0, h - 1, w, h - 1, borderColor, 1);
+
+            // 使用原生 drawRoundRect 绘制背景+边框
+            g.drawRoundRect(0, 0, w, h, 12, bgColor, borderColor, 1);
         } else {
-            this.drawRoundRect(g, 0, 0, w, h, 12, "rgba(255,255,255,0.03)");
+            // 普通项 - 略带背景
+            g.drawRoundRect(0, 0, w, h, 12, "rgba(255,255,255,0.03)", "rgba(255,255,255,0.05)", 1);
         }
 
         // 排名徽章
@@ -533,11 +535,14 @@ export class LeaderboardPanel extends Laya.Scene {
         g.clear();
 
         if (isPrimary) {
-            // 绿色按钮
-            this.drawRoundRect(g, 0, 0, width, height, 12, this.COLORS.btnPrimary);
+            // 主按钮 - 绿色背景 + 轻微阴影效果
+            // 先画阴影
+            g.drawRoundRect(2, 4, width, height, 12, "rgba(0,0,0,0.3)");
+            // 再画按钮主体
+            g.drawRoundRect(0, 0, width, height, 12, this.COLORS.btnPrimary, "rgba(255,255,255,0.2)", 1);
         } else {
-            // 灰色边框按钮
-            this.drawRoundRect(g, 0, 0, width, height, 12, this.COLORS.btnSecondary);
+            // 次要按钮 - 透明背景 + 明显边框
+            g.drawRoundRect(0, 0, width, height, 12, "rgba(255,255,255,0.1)", "rgba(255,255,255,0.3)", 1);
         }
 
         const btnText = new Laya.Text();
