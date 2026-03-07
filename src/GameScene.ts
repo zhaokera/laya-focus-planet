@@ -79,6 +79,7 @@ export class GameScene extends Laya.Scene {
         this.createHudPanel();
         this.createDifficultyButtons();
         this.createActionButtons();
+        this.createLegend();
         this.layoutUI();
 
         Laya.timer.frameLoop(1, this, this.updateTimer);
@@ -294,6 +295,52 @@ export class GameScene extends Laya.Scene {
         this.hintBtn.pos(w - 100, 185);
         this.hintBtn.on(Event.TOUCH_START, this, this.onToggleHint);
         this.uiContainer.addChild(this.hintBtn);
+    }
+
+    private createLegend(): void {
+        const w = Laya.stage.width;
+        const legendItems = [
+            { label: "待点", color: "#6366F1" },
+            { label: "正确", color: "#FFD700" },
+            { label: "错误", color: "#EF4444" }
+        ];
+
+        const dotSize = 10;
+        const gap = 16;
+        const fontSize = 11;
+
+        // 计算整体宽度
+        let totalWidth = 0;
+        legendItems.forEach((item, i) => {
+            // 每个项目：dot + 间距 + 文字
+            const textWidth = item.label.length * fontSize * 0.6;  // 估算文字宽度
+            totalWidth += dotSize + 6 + textWidth;
+            if (i < legendItems.length - 1) totalWidth += gap;
+        });
+
+        let xOffset = (w - totalWidth) / 2;
+        const y = Laya.stage.height - 20 - fontSize;  // bottom: 20px
+
+        legendItems.forEach((item) => {
+            // 小圆点
+            const dot = new Laya.Sprite();
+            dot.graphics.drawRoundRect(0, 0, dotSize, dotSize, 3, item.color);
+            dot.pos(xOffset, y + fontSize / 2 - dotSize / 2);
+            this.uiContainer.addChild(dot);
+
+            xOffset += dotSize + 6;
+
+            // 文字
+            const text = new Laya.Text();
+            text.text = item.label;
+            text.fontSize = fontSize;
+            text.font = "Microsoft YaHei";
+            text.color = "rgba(255, 255, 255, 0.5)";
+            text.pos(xOffset, y);
+            this.uiContainer.addChild(text);
+
+            xOffset += item.label.length * fontSize * 0.6 + gap;
+        });
     }
 
     private createMainButton(text: string, w: number, h: number): Laya.Sprite {
