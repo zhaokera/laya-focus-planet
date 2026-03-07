@@ -1,5 +1,6 @@
 const { regClass, Event } = Laya;
 import { GameScene } from "./GameScene";
+import { LeaderboardPanel } from "./LeaderboardPanel";
 
 @regClass("84f89060-d701-4411-b5dc-ae6e4a05aed0", "../src/Main.ts")
 export class Main extends Laya.Scene {
@@ -174,7 +175,9 @@ export class Main extends Laya.Scene {
                 } else if (d.action === "challenge") {
                     this.currentDifficulty = 4;
                 } else if (d.action === "rank") {
-                    this.currentDifficulty = 3;
+                    this.showLeaderboard();
+                } else if (d.action === "settings") {
+                    console.log("[Home] settings clicked");
                 }
             };
 
@@ -267,6 +270,14 @@ export class Main extends Laya.Scene {
         scene.currentDifficulty = this.currentDifficulty;
         Laya.stage.addChild(scene);
         this.destroy();
+    }
+
+    private showLeaderboard(): void {
+        const panel = new LeaderboardPanel();
+        panel.setOnClose(() => {
+            panel.destroy();
+        });
+        Laya.stage.addChild(panel);
     }
 
     onDestroy(): void {

@@ -1,38 +1,51 @@
 /**
- * 排行榜页面 - 舒尔特方格
- * 风格：深色太空主题，紫色/金色配色
+ * 排行榜页面 - Focus Planet
+ * 风格：深空主题，金银铜前三名高亮
  */
+
+const { Event } = Laya;
+
+interface RankRecord {
+    rank: number;
+    name: string;
+    time: string;
+    score: number;
+    timeMs: number;
+    errors: number;
+    date: number;
+}
 
 export class LeaderboardPanel extends Laya.Sprite {
     private readonly BASE_W: number = 375;
     private readonly BASE_H: number = 750;
 
-    private readonly ASSET = {
-        bgFull: "ui/game_design/bg_full.png",
-        panel: "ui/game_design/popup_panel.png",
-        btnNormal: "ui/game_design/diff_btn_normal.png",
-        btnActive: "ui/game_design/diff_btn_active.png",
-        closeBtn: "ui/game_design/popup_btn.png",
-        cellNormal: "ui/game_design/cell_normal.png",
-        cellCorrect: "ui/game_design/cell_correct.png"
+    private readonly COLORS = {
+        bg: "rgba(26,26,46,0.95)",
+        panelBg: "rgba(255,255,255,0.05)",
+        title: "#FFD700",
+        gold: "#FFD700",
+        silver: "#C0C0C0",
+        bronze: "#CD7F32",
+        normal: "#FFFFFF",
+        textMuted: "#8b9dc3",
+        accent: "#3498DB",
+        btnPrimary: "#27AE60",
+        btnSecondary: "rgba(255,255,255,0.1)"
     };
 
-    // 数据存储key
-    private readonly STORAGE_KEY = "schulte_leaderboard";
+    private readonly STORAGE_KEY = "focus_planet_leaderboard";
 
-    private root: Laya.Sprite = null;
     private bgLayer: Laya.Sprite = null;
     private contentLayer: Laya.Sprite = null;
-
-    private titleText: Laya.Text = null;
     private tabContainer: Laya.Sprite = null;
     private listContainer: Laya.Sprite = null;
     private scrollPanel: Laya.Panel = null;
 
-    private currentTab: number = 4; // 3, 4, 5 对应难度
-    private tabBtns: Record<number, Laya.Sprite> = {};
+    private currentTab: number = 0; // 0:总榜, 1:周榜, 2:月榜
+    private tabBtns: Laya.Sprite[] = [];
 
     private onCloseCallback: (() => void) | null = null;
+    private onRestartCallback: (() => void) | null = null;
 
     constructor() {
         super();
@@ -44,7 +57,7 @@ export class LeaderboardPanel extends Laya.Sprite {
 
         // 半透明遮罩背景
         this.bgLayer = new Laya.Sprite();
-        this.bgLayer.graphics.drawRect(0, 0, this.BASE_W, this.BASE_H, "rgba(0,0,0,0.75)");
+        this.bgLayer.graphics.drawRect(0, 0, this.BASE_W, this.BASE_H, "rgba(0,0,0,0.8)");
         this.bgLayer.alpha = 0;
         this.addChild(this.bgLayer);
 
@@ -55,35 +68,48 @@ export class LeaderboardPanel extends Laya.Sprite {
         this.createMainPanel();
         this.createTitle();
         this.createTabs();
-        this.createListHeader();
         this.createScrollList();
-        this.createCloseButton();
+        this.createButtons();
 
         // 入场动画
         this.playEnterAnimation();
     }
 
     private createMainPanel(): void {
-        // 主面板背景
         const panelW = 340;
         const panelH = 580;
         const panelX = (this.BASE_W - panelW) * 0.5;
-        const panelY = 60;
+        const panelY = 50;
 
         // 面板阴影
         const shadow = new Laya.Sprite();
-        shadow.graphics.drawRoundRect(panelX + 4, panelY + 4, panelW, panelH, 20, "rgba(0,0,0,0.5)");
+        shadow.graphics.drawRoundRect(panelX + 6, panelY + 6, panelW, panelH, 24, "rgba(0,0,0,0.4)");
         this.contentLayer.addChild(shadow);
 
-        // 面板主体
+        // 面板主体 - 毛玻璃效果背景
         const panel = new Laya.Sprite();
         panel.size(panelW, panelH);
         panel.pos(panelX, panelY);
-        this.loadImageWithFallback(panel, this.ASSET.panel, panelW, panelH);
+
+        // 绘制圆角矩形背景
+        const g = panel.graphics;
+        g.clear();
+        this.drawRoundRect(g, 0, 0, panelW, panelH, 24, this.COLORS.panelBg);
+
         this.contentLayer.addChild(panel);
 
         // 装饰性边角
         this.drawPanelCorners(panel, panelW, panelH);
+    }
+
+    private drawRoundRect(g: Laya.Graphics, x: number, y: number, w: number, h: number, r: number, color: string): void {
+        // 简化的圆角矩形
+        g.drawRect(x + r, y, w - 2 * r, h, color);
+        g.drawRect(x, y + r, w, h - 2 * r, color);
+        g.drawCircle(x + r, y + r, r, color);
+        g.drawCircle(x + w - r, y + r, r, color);
+        g.drawCircle(x + r, y + h - r, r, color);
+        g.drawCircle(x + w - r, y + h - r, r, color);
     }
 
     private drawPanelCorners(panel: Laya.Sprite, w: number, h: number): void {
@@ -92,133 +118,128 @@ export class LeaderboardPanel extends Laya.Sprite {
         const seg = 16;
         const m = 12;
 
-        // 左上角
-        const lt = new Laya.Sprite();
-        lt.graphics.drawLine(0, seg, 0, 0, color, lineW);
-        lt.graphics.drawLine(0, 0, seg, 0, color, lineW);
-        lt.pos(m, m);
-        panel.addChild(lt);
+        const corners = [
+            { lines: [[0, seg, 0, 0], [0, 0, seg, 0]], pos: [m, m] },
+            { lines: [[0, 0, seg, 0], [seg, 0, seg, seg]], pos: [w - m - seg, m] },
+            { lines: [[0, 0, 0, seg], [0, seg, seg, seg]], pos: [m, h - m - seg] },
+            { lines: [[seg, 0, seg, seg], [0, seg, seg, seg]], pos: [w - m - seg, h - m - seg] }
+        ];
 
-        // 右上角
-        const rt = new Laya.Sprite();
-        rt.graphics.drawLine(0, 0, seg, 0, color, lineW);
-        rt.graphics.drawLine(seg, 0, seg, seg, color, lineW);
-        rt.pos(w - m - seg, m);
-        panel.addChild(rt);
-
-        // 左下角
-        const lb = new Laya.Sprite();
-        lb.graphics.drawLine(0, 0, 0, seg, color, lineW);
-        lb.graphics.drawLine(0, seg, seg, seg, color, lineW);
-        lb.pos(m, h - m - seg);
-        panel.addChild(lb);
-
-        // 右下角
-        const rb = new Laya.Sprite();
-        rb.graphics.drawLine(seg, 0, seg, seg, color, lineW);
-        rb.graphics.drawLine(0, seg, seg, seg, color, lineW);
-        rb.pos(w - m - seg, h - m - seg);
-        panel.addChild(rb);
+        corners.forEach((corner) => {
+            const sprite = new Laya.Sprite();
+            corner.lines.forEach((line) => {
+                sprite.graphics.drawLine(line[0], line[1], line[2], line[3], color, lineW);
+            });
+            sprite.pos(corner.pos[0], corner.pos[1]);
+            panel.addChild(sprite);
+        });
     }
 
     private createTitle(): void {
-        this.titleText = new Laya.Text();
-        this.titleText.text = "🏆 排行榜";
-        this.titleText.font = "Microsoft YaHei";
-        this.titleText.fontSize = 28;
-        this.titleText.bold = true;
-        this.titleText.color = "#FFD700";
-        this.titleText.stroke = 2;
-        this.titleText.strokeColor = "rgba(0,0,0,0.5)";
-        this.titleText.width = this.BASE_W;
-        this.titleText.align = "center";
-        this.titleText.pos(0, 80);
-        this.contentLayer.addChild(this.titleText);
+        // Logo文字
+        const logoText = new Laya.Text();
+        logoText.text = "FOCUS PLANET";
+        logoText.font = "Microsoft YaHei";
+        logoText.fontSize = 12;
+        logoText.color = this.COLORS.textMuted;
+        logoText.width = this.BASE_W;
+        logoText.align = "center";
+        logoText.pos(0, 66);
+        this.contentLayer.addChild(logoText);
+
+        // 主标题
+        const titleText = new Laya.Text();
+        titleText.text = "排 行 榜";
+        titleText.font = "Microsoft YaHei";
+        titleText.fontSize = 26;
+        titleText.bold = true;
+        titleText.color = this.COLORS.title;
+        titleText.stroke = 2;
+        titleText.strokeColor = "rgba(255,165,0,0.3)";
+        titleText.width = this.BASE_W;
+        titleText.align = "center";
+        titleText.pos(0, 84);
+        this.contentLayer.addChild(titleText);
     }
 
     private createTabs(): void {
-        const sizes = [3, 4, 5];
-        const btnW = 70;
-        const btnH = 36;
-        const gap = 20;
-        const total = sizes.length * btnW + (sizes.length - 1) * gap;
-        let x = (this.BASE_W - total) * 0.5;
+        const tabs = ["总榜", "周榜", "月榜"];
+        const tabWidth = 70;
+        const tabHeight = 32;
+        const gap = 12;
+        const startX = (this.BASE_W - (tabs.length * tabWidth + (tabs.length - 1) * gap)) / 2;
+        const tabY = 130;
 
         this.tabContainer = new Laya.Sprite();
-        this.tabContainer.pos(0, 125);
+        this.tabContainer.pos(0, 0);
         this.contentLayer.addChild(this.tabContainer);
 
-        sizes.forEach((size) => {
-            const btn = new Laya.Sprite();
-            btn.size(btnW, btnH);
-            btn.pos(x, 0);
-            btn.mouseEnabled = true;
+        tabs.forEach((label, index) => {
+            const tab = new Laya.Sprite();
+            tab.size(tabWidth, tabHeight);
+            tab.pos(startX + index * (tabWidth + gap), tabY);
+            tab.mouseEnabled = true;
 
-            // 按钮背景
-            const bg = new Laya.Sprite();
-            bg.name = "bg";
-            bg.size(btnW, btnH);
-            this.loadImageWithFallback(bg, size === this.currentTab ? this.ASSET.btnActive : this.ASSET.btnNormal, btnW, btnH);
-            btn.addChild(bg);
+            this.updateTabStyle(tab, index === this.currentTab);
 
-            // 按钮文字
             const text = new Laya.Text();
-            text.text = `${size}×${size}`;
+            text.name = "label";
+            text.text = label;
             text.font = "Microsoft YaHei";
             text.fontSize = 14;
-            text.bold = true;
-            text.color = size === this.currentTab ? "#FFD700" : "#FFFFFF";
-            text.width = btnW;
-            text.height = btnH;
+            text.bold = index === this.currentTab;
+            text.color = index === this.currentTab ? this.COLORS.title : this.COLORS.textMuted;
+            text.width = tabWidth;
+            text.height = tabHeight;
             text.align = "center";
             text.valign = "middle";
-            btn.addChild(text);
+            tab.addChild(text);
 
-            btn.on(Laya.Event.CLICK, this, () => this.onTabClick(size));
+            tab.on(Event.CLICK, this, () => this.onTabClick(index));
 
-            this.tabBtns[size] = btn;
-            this.tabContainer.addChild(btn);
-            x += btnW + gap;
+            this.tabBtns.push(tab);
+            this.tabContainer.addChild(tab);
         });
     }
 
-    private createListHeader(): void {
-        const headerY = 175;
-        const headerH = 32;
-        const panelX = (this.BASE_W - 340) * 0.5;
+    private updateTabStyle(tab: Laya.Sprite, active: boolean): void {
+        const g = tab.graphics;
+        g.clear();
 
-        // 表头背景
-        const headerBg = new Laya.Sprite();
-        headerBg.graphics.drawRoundRect(panelX, headerY, 340, headerH, 0, "rgba(99,102,241,0.25)");
-        this.contentLayer.addChild(headerBg);
+        if (active) {
+            // 激活状态 - 金色渐变背景
+            g.drawRoundRect(0, 0, tab.width, tab.height, 16, "rgba(255,215,0,0.15)");
+            // 边框
+            g.drawLine(0, tab.height - 1, tab.width, tab.height - 1, "rgba(255,215,0,0.4)", 2);
+        } else {
+            g.drawRoundRect(0, 0, tab.width, tab.height, 16, "rgba(255,255,255,0.05)");
+        }
+    }
 
-        // 表头文字
-        const columns = [
-            { text: "排名", x: panelX + 30, w: 50 },
-            { text: "用时", x: panelX + 100, w: 80 },
-            { text: "错误", x: panelX + 190, w: 60 },
-            { text: "日期", x: panelX + 260, w: 70 }
-        ];
+    private onTabClick(index: number): void {
+        if (this.currentTab === index) return;
 
-        columns.forEach((col) => {
-            const text = new Laya.Text();
-            text.text = col.text;
-            text.font = "Microsoft YaHei";
-            text.fontSize = 13;
-            text.bold = true;
-            text.color = "#A5B4FC";
-            text.width = col.w;
-            text.align = "center";
-            text.pos(col.x, headerY + 8);
-            this.contentLayer.addChild(text);
+        this.currentTab = index;
+
+        // 更新Tab样式
+        this.tabBtns.forEach((tab, i) => {
+            this.updateTabStyle(tab, i === index);
+            const text = tab.getChildByName("label") as Laya.Text;
+            if (text) {
+                text.color = i === index ? this.COLORS.title : this.COLORS.textMuted;
+                text.bold = i === index;
+            }
         });
+
+        // 重新渲染列表
+        this.refreshList();
     }
 
     private createScrollList(): void {
-        const panelX = (this.BASE_W - 340) * 0.5;
-        const listY = 210;
-        const listW = 340;
-        const listH = 360;
+        const panelX = (this.BASE_W - 320) * 0.5;
+        const listY = 175;
+        const listW = 320;
+        const listH = 370;
 
         // 滚动面板
         this.scrollPanel = new Laya.Panel();
@@ -238,9 +259,9 @@ export class LeaderboardPanel extends Laya.Sprite {
     private refreshList(): void {
         this.listContainer.removeChildren();
 
-        const records = this.getRecords(this.currentTab);
-        const itemH = 56;
-        const listW = 340;
+        const records = this.getRankData();
+        const itemH = 58;
+        const listW = 320;
 
         if (records.length === 0) {
             this.showEmptyState();
@@ -248,81 +269,122 @@ export class LeaderboardPanel extends Laya.Sprite {
         }
 
         records.forEach((record, index) => {
-            const item = this.createListItem(record, index, listW, itemH);
+            const item = this.createRankItem(record, index, listW, itemH);
             item.pos(0, index * itemH);
+            item.alpha = 0;
             this.listContainer.addChild(item);
+
+            // 依次淡入动画
+            Laya.Tween.to(item, { alpha: 1 }, 300, null, null, index * 80);
         });
 
-        this.listContainer.height = Math.max(records.length * itemH, 360);
+        this.listContainer.height = Math.max(records.length * itemH, 370);
     }
 
-    private createListItem(record: LeaderboardRecord, index: number, w: number, h: number): Laya.Sprite {
+    private createRankItem(data: RankRecord, index: number, w: number, h: number): Laya.Sprite {
         const item = new Laya.Sprite();
         item.size(w, h);
 
-        // 背景色交替
-        if (index % 2 === 0) {
-            item.graphics.drawRect(0, 0, w, h, "rgba(255,255,255,0.03)");
+        const isTop3 = data.rank <= 3;
+        const rankType = data.rank === 1 ? "gold" : data.rank === 2 ? "silver" : data.rank === 3 ? "bronze" : "normal";
+
+        // 绘制背景
+        const g = item.graphics;
+        g.clear();
+
+        if (isTop3) {
+            const bgColor = rankType === "gold"
+                ? "rgba(255,215,0,0.12)"
+                : rankType === "silver"
+                    ? "rgba(192,192,192,0.12)"
+                    : "rgba(205,127,50,0.12)";
+            this.drawRoundRect(g, 0, 0, w, h, 12, bgColor);
+
+            // 发光边框效果
+            const borderColor = rankType === "gold"
+                ? "rgba(255,215,0,0.3)"
+                : rankType === "silver"
+                    ? "rgba(192,192,192,0.3)"
+                    : "rgba(205,127,50,0.3)";
+            g.drawLine(0, 0, w, 0, borderColor, 1);
+            g.drawLine(0, h - 1, w, h - 1, borderColor, 1);
+        } else {
+            this.drawRoundRect(g, 0, 0, w, h, 12, "rgba(255,255,255,0.03)");
         }
 
-        // 分隔线
-        const line = new Laya.Sprite();
-        line.graphics.drawLine(20, h - 1, w - 20, h - 1, "rgba(255,255,255,0.08)", 1);
-        item.addChild(line);
+        // 排名徽章
+        const badgeSize = isTop3 ? 32 : 26;
+        const badgeX = 12;
+        const badgeY = (h - badgeSize) / 2;
 
-        // 排名
-        const rankText = new Laya.Text();
-        rankText.text = this.getRankDisplay(index);
-        rankText.font = "Microsoft YaHei";
-        rankText.fontSize = index < 3 ? 18 : 14;
-        rankText.bold = index < 3;
-        rankText.color = this.getRankColor(index);
-        rankText.width = 50;
-        rankText.height = h;
-        rankText.align = "center";
-        rankText.valign = "middle";
-        rankText.pos(10, 0);
-        item.addChild(rankText);
+        if (isTop3) {
+            const badgeColor = rankType === "gold"
+                ? this.COLORS.gold
+                : rankType === "silver"
+                    ? this.COLORS.silver
+                    : this.COLORS.bronze;
 
-        // 用时
+            // 徽章背景 - 圆形
+            g.drawCircle(badgeX + badgeSize / 2, badgeY + badgeSize / 2, badgeSize / 2, badgeColor);
+
+            // 排名数字
+            const rankNum = new Laya.Text();
+            rankNum.text = String(data.rank);
+            rankNum.font = "Microsoft YaHei";
+            rankNum.fontSize = 14;
+            rankNum.bold = true;
+            rankNum.color = "#FFFFFF";
+            rankNum.width = badgeSize;
+            rankNum.height = badgeSize;
+            rankNum.align = "center";
+            rankNum.valign = "middle";
+            rankNum.pos(badgeX, badgeY);
+            item.addChild(rankNum);
+        } else {
+            // 普通排名 - 圆形灰底
+            g.drawCircle(badgeX + badgeSize / 2, badgeY + badgeSize / 2, badgeSize / 2, "rgba(255,255,255,0.1)");
+
+            const rankNum = new Laya.Text();
+            rankNum.text = String(data.rank);
+            rankNum.font = "Microsoft YaHei";
+            rankNum.fontSize = 12;
+            rankNum.color = this.COLORS.textMuted;
+            rankNum.width = badgeSize;
+            rankNum.height = badgeSize;
+            rankNum.align = "center";
+            rankNum.valign = "middle";
+            rankNum.pos(badgeX, badgeY);
+            item.addChild(rankNum);
+        }
+
+        // 玩家名称
+        const nameText = new Laya.Text();
+        nameText.text = data.name;
+        nameText.font = "Microsoft YaHei";
+        nameText.fontSize = isTop3 ? 15 : 13;
+        nameText.bold = isTop3;
+        nameText.color = isTop3 ? this.COLORS[rankType as keyof typeof this.COLORS] || this.COLORS.normal : this.COLORS.normal;
+        nameText.pos(54, isTop3 ? 10 : 8);
+        item.addChild(nameText);
+
+        // 时间和分数
+        const statsY = isTop3 ? 28 : 26;
+
         const timeText = new Laya.Text();
-        timeText.text = this.formatTime(record.time);
+        timeText.text = "⏱ " + data.time;
         timeText.font = "Microsoft YaHei";
-        timeText.fontSize = 16;
-        timeText.bold = true;
-        timeText.color = "#4FC3F7";
-        timeText.width = 80;
-        timeText.height = h;
-        timeText.align = "center";
-        timeText.valign = "middle";
-        timeText.pos(70, 0);
+        timeText.fontSize = 11;
+        timeText.color = this.COLORS.accent;
+        timeText.pos(54, statsY);
         item.addChild(timeText);
 
-        // 错误次数
-        const errorText = new Laya.Text();
-        errorText.text = `${record.errors}次`;
-        errorText.font = "Microsoft YaHei";
-        errorText.fontSize = 14;
-        errorText.color = record.errors === 0 ? "#4ADE80" : (record.errors <= 2 ? "#FBBF24" : "#F87171");
-        errorText.width = 60;
-        errorText.height = h;
-        errorText.align = "center";
-        errorText.valign = "middle";
-        errorText.pos(160, 0);
-        item.addChild(errorText);
-
-        // 日期
-        const dateText = new Laya.Text();
-        dateText.text = this.formatDate(record.date);
-        dateText.font = "Microsoft YaHei";
-        dateText.fontSize = 12;
-        dateText.color = "rgba(255,255,255,0.5)";
-        dateText.width = 70;
-        dateText.height = h;
-        dateText.align = "center";
-        dateText.valign = "middle";
-        dateText.pos(235, 0);
-        item.addChild(dateText);
+        const scoreText = new Laya.Text();
+        scoreText.text = "⭐ " + data.score + "分";
+        scoreText.font = "Microsoft YaHei";
+        scoreText.fontSize = 11;
+        scoreText.color = this.COLORS.textMuted;
+        scoreText.pos(150, statsY);
+        item.addChild(scoreText);
 
         return item;
     }
@@ -334,72 +396,79 @@ export class LeaderboardPanel extends Laya.Sprite {
         emptyText.fontSize = 16;
         emptyText.color = "rgba(255,255,255,0.4)";
         emptyText.leading = 10;
-        emptyText.width = 340;
+        emptyText.width = 320;
         emptyText.align = "center";
-        emptyText.height = 360;
+        emptyText.height = 370;
         emptyText.valign = "middle";
         this.listContainer.addChild(emptyText);
     }
 
-    private createCloseButton(): void {
-        const btnW = 140;
+    private createButtons(): void {
+        const btnW = 130;
         const btnH = 44;
-        const btnX = (this.BASE_W - btnW) * 0.5;
-        const btnY = 580;
+        const gap = 20;
+        const startX = (this.BASE_W - (btnW * 2 + gap)) / 2;
+        const btnY = 570;
 
+        // 再来一局按钮
+        const primaryBtn = this.createButton("再来一局", btnW, btnH, true);
+        primaryBtn.pos(startX, btnY);
+        this.contentLayer.addChild(primaryBtn);
+        primaryBtn.on(Event.CLICK, this, this.onRestart);
+
+        // 返回主页按钮
+        const secondaryBtn = this.createButton("返回主页", btnW, btnH, false);
+        secondaryBtn.pos(startX + btnW + gap, btnY);
+        this.contentLayer.addChild(secondaryBtn);
+        secondaryBtn.on(Event.CLICK, this, this.close);
+    }
+
+    private createButton(text: string, width: number, height: number, isPrimary: boolean): Laya.Sprite {
         const btn = new Laya.Sprite();
-        btn.size(btnW, btnH);
-        btn.pos(btnX, btnY);
+        btn.size(width, height);
         btn.mouseEnabled = true;
 
-        // 按钮背景
-        this.loadImageWithFallback(btn, this.ASSET.closeBtn, btnW, btnH);
-        this.contentLayer.addChild(btn);
+        const g = btn.graphics;
+        g.clear();
 
-        // 按钮文字
-        const text = new Laya.Text();
-        text.text = "关闭";
-        text.font = "Microsoft YaHei";
-        text.fontSize = 16;
-        text.bold = true;
-        text.color = "#FFFFFF";
-        text.width = btnW;
-        text.height = btnH;
-        text.align = "center";
-        text.valign = "middle";
-        btn.addChild(text);
+        if (isPrimary) {
+            // 绿色按钮
+            this.drawRoundRect(g, 0, 0, width, height, 12, this.COLORS.btnPrimary);
+        } else {
+            // 灰色边框按钮
+            this.drawRoundRect(g, 0, 0, width, height, 12, this.COLORS.btnSecondary);
+        }
 
-        btn.on(Laya.Event.CLICK, this, this.close);
+        const btnText = new Laya.Text();
+        btnText.text = text;
+        btnText.font = "Microsoft YaHei";
+        btnText.fontSize = 14;
+        btnText.bold = true;
+        btnText.color = "#FFFFFF";
+        btnText.width = width;
+        btnText.height = height;
+        btnText.align = "center";
+        btnText.valign = "middle";
+        btn.addChild(btnText);
+
+        return btn;
     }
 
     // ==================== 交互逻辑 ====================
 
-    private onTabClick(size: number): void {
-        if (size === this.currentTab) return;
-
-        this.currentTab = size;
-
-        // 更新tab样式
-        Object.keys(this.tabBtns).forEach((k) => {
-            const key = Number(k);
-            const btn = this.tabBtns[key];
-            const bg = btn.getChildByName("bg") as Laya.Sprite;
-            if (bg) {
-                this.loadImageWithFallback(bg, key === size ? this.ASSET.btnActive : this.ASSET.btnNormal, bg.width, bg.height);
-            }
-            // 更新文字颜色
-            btn.children.forEach((child) => {
-                if (child instanceof Laya.Text) {
-                    child.color = key === size ? "#FFD700" : "#FFFFFF";
-                }
-            });
-        });
-
-        this.refreshList();
+    private onRestart(): void {
+        if (this.onRestartCallback) {
+            this.onRestartCallback();
+        }
+        this.close();
     }
 
     public setOnClose(callback: () => void): void {
         this.onCloseCallback = callback;
+    }
+
+    public setOnRestart(callback: () => void): void {
+        this.onRestartCallback = callback;
     }
 
     public close(): void {
@@ -415,7 +484,7 @@ export class LeaderboardPanel extends Laya.Sprite {
 
     private playEnterAnimation(): void {
         this.bgLayer.alpha = 0;
-        this.contentLayer.scale(0.8, 0.8);
+        this.contentLayer.scale(0.9, 0.9);
         this.contentLayer.alpha = 0;
 
         Laya.Tween.to(this.bgLayer, { alpha: 1 }, 200);
@@ -424,34 +493,97 @@ export class LeaderboardPanel extends Laya.Sprite {
 
     private playExitAnimation(callback: () => void): void {
         Laya.Tween.to(this.bgLayer, { alpha: 0 }, 150);
-        Laya.Tween.to(this.contentLayer, { scaleX: 0.8, scaleY: 0.8, alpha: 0 }, 150, Laya.Ease.backIn, Laya.Handler.create(null, callback));
+        Laya.Tween.to(this.contentLayer, { scaleX: 0.9, scaleY: 0.9, alpha: 0 }, 150, Laya.Ease.backIn, Laya.Handler.create(null, callback));
     }
 
-    // ==================== 数据存储 ====================
+    // ==================== 数据管理 ====================
 
-    public addRecord(size: number, time: number, errors: number): void {
-        const records = this.getRecords(size);
-        records.push({
-            time,
-            errors,
-            date: Date.now()
-        });
+    private getRankData(): RankRecord[] {
+        // 从本地存储获取数据
+        const storageKey = `${this.STORAGE_KEY}_${this.currentTab}`;
+        let records: RankRecord[] = [];
 
-        // 按用时排序，用时相同按错误次数排序
-        records.sort((a, b) => {
-            if (a.time !== b.time) return a.time - b.time;
+        try {
+            const data = Laya.LocalStorage.getItem(storageKey);
+            if (data) {
+                const parsed = JSON.parse(data);
+                records = parsed.map((r: any, i: number) => ({
+                    rank: i + 1,
+                    name: r.name || "匿名玩家",
+                    time: this.formatTime(r.timeMs || r.time),
+                    score: this.calculateScore(r.timeMs || r.time, r.errors),
+                    timeMs: r.timeMs || r.time,
+                    errors: r.errors,
+                    date: r.date
+                }));
+            }
+        } catch (e) {
+            console.warn("读取排行榜数据失败", e);
+        }
+
+        // 如果没有数据，显示模拟数据
+        if (records.length === 0) {
+            return this.getMockData();
+        }
+
+        return records;
+    }
+
+    private getMockData(): RankRecord[] {
+        const mockData = [
+            { rank: 1, name: "星际探险家", time: "00:45.320", score: 98 },
+            { rank: 2, name: "宇宙旅行者", time: "01:02.150", score: 92 },
+            { rank: 3, name: "银河漫游", time: "01:15.890", score: 88 },
+            { rank: 4, name: "玩家小明", time: "01:23.400", score: 85 },
+            { rank: 5, name: "快乐玩家", time: "01:30.200", score: 82 },
+            { rank: 6, name: "游戏达人", time: "01:45.600", score: 78 },
+            { rank: 7, name: "新手玩家", time: "02:10.300", score: 72 }
+        ];
+
+        return mockData;
+    }
+
+    /**
+     * 添加一条排行榜记录
+     */
+    public static addRecord(timeMs: number, errors: number, name: string = "匿名玩家"): void {
+        const STORAGE_KEY = "focus_planet_leaderboard";
+
+        // 总榜
+        const totalRecords = LeaderboardPanel.loadRecords(STORAGE_KEY, 0);
+        totalRecords.push({ timeMs, errors, name, date: Date.now() });
+        totalRecords.sort((a, b) => {
+            if (a.timeMs !== b.timeMs) return a.timeMs - b.timeMs;
             return a.errors - b.errors;
         });
+        LeaderboardPanel.saveRecords(STORAGE_KEY, 0, totalRecords.slice(0, 50));
 
-        // 只保留前50条
-        const topRecords = records.slice(0, 50);
+        // 周榜 - 只保留最近7天
+        const weekRecords = LeaderboardPanel.loadRecords(STORAGE_KEY, 1);
+        const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const filteredWeek = weekRecords.filter(r => r.date > weekAgo);
+        filteredWeek.push({ timeMs, errors, name, date: Date.now() });
+        filteredWeek.sort((a, b) => {
+            if (a.timeMs !== b.timeMs) return a.timeMs - b.timeMs;
+            return a.errors - b.errors;
+        });
+        LeaderboardPanel.saveRecords(STORAGE_KEY, 1, filteredWeek.slice(0, 50));
 
-        this.saveRecords(size, topRecords);
+        // 月榜 - 只保留最近30天
+        const monthRecords = LeaderboardPanel.loadRecords(STORAGE_KEY, 2);
+        const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        const filteredMonth = monthRecords.filter(r => r.date > monthAgo);
+        filteredMonth.push({ timeMs, errors, name, date: Date.now() });
+        filteredMonth.sort((a, b) => {
+            if (a.timeMs !== b.timeMs) return a.timeMs - b.timeMs;
+            return a.errors - b.errors;
+        });
+        LeaderboardPanel.saveRecords(STORAGE_KEY, 2, filteredMonth.slice(0, 50));
     }
 
-    private getRecords(size: number): LeaderboardRecord[] {
+    private static loadRecords(storageKey: string, tab: number): any[] {
         try {
-            const data = Laya.LocalStorage.getItem(`${this.STORAGE_KEY}_${size}`);
+            const data = Laya.LocalStorage.getItem(`${storageKey}_${tab}`);
             if (data) {
                 return JSON.parse(data);
             }
@@ -461,28 +593,20 @@ export class LeaderboardPanel extends Laya.Sprite {
         return [];
     }
 
-    private saveRecords(size: number, records: LeaderboardRecord[]): void {
+    private static saveRecords(storageKey: string, tab: number, records: any[]): void {
         try {
-            Laya.LocalStorage.setItem(`${this.STORAGE_KEY}_${size}`, JSON.stringify(records));
+            Laya.LocalStorage.setItem(`${storageKey}_${tab}`, JSON.stringify(records));
         } catch (e) {
             console.warn("保存排行榜数据失败", e);
         }
     }
 
-    // ==================== 工具方法 ====================
-
-    private getRankDisplay(index: number): string {
-        if (index === 0) return "🥇";
-        if (index === 1) return "🥈";
-        if (index === 2) return "🥉";
-        return `${index + 1}`;
-    }
-
-    private getRankColor(index: number): string {
-        if (index === 0) return "#FFD700";
-        if (index === 1) return "#C0C0C0";
-        if (index === 2) return "#CD7F32";
-        return "#E0E7FF";
+    private calculateScore(timeMs: number, errors: number): number {
+        // 基础分100，时间越短分数越高，错误扣分
+        const baseScore = 100;
+        const timeDeduction = Math.floor(timeMs / 1000); // 每秒扣1分
+        const errorDeduction = errors * 3; // 每次错误扣3分
+        return Math.max(0, baseScore - timeDeduction - errorDeduction);
     }
 
     private formatTime(ms: number): string {
@@ -490,42 +614,17 @@ export class LeaderboardPanel extends Laya.Sprite {
         const mm = Math.floor(totalSec / 60);
         const ss = totalSec % 60;
         const msPart = Math.floor((ms % 1000) / 10);
+
         if (mm > 0) {
-            return `${mm}:${ss.toString().padStart(2, "0")}.${msPart.toString().padStart(2, "0")}`;
+            return `${mm.toString().padStart(2, "0")}:${ss.toString().padStart(2, "0")}.${msPart.toString().padStart(2, "0")}`;
         }
-        return `${ss}.${msPart.toString().padStart(2, "0")}秒`;
-    }
-
-    private formatDate(timestamp: number): string {
-        const date = new Date(timestamp);
-        const month = (date.getMonth() + 1).toString().padStart(2, "0");
-        const day = date.getDate().toString().padStart(2, "0");
-        return `${month}/${day}`;
-    }
-
-    private loadImageWithFallback(sp: Laya.Sprite, relPath: string, w: number, h: number): void {
-        const candidates = [
-            relPath,
-            `assets/${relPath}`,
-            `assets/resources/${relPath}`,
-            `resources/${relPath}`
-        ];
-        for (const path of candidates) {
-            sp.loadImage(path);
-            break;
-        }
+        return `00:${ss.toString().padStart(2, "0")}.${msPart.toString().padStart(2, "0")}`;
     }
 
     public destroy(): void {
         Laya.Tween.clearAll(this.bgLayer);
         Laya.Tween.clearAll(this.contentLayer);
+        Laya.Tween.clearAll(this.listContainer);
         super.destroy();
     }
-}
-
-// 数据结构定义
-interface LeaderboardRecord {
-    time: number;      // 用时（毫秒）
-    errors: number;    // 错误次数
-    date: number;      // 时间戳
 }
