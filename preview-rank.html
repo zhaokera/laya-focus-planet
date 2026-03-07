@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Focus Planet - 排行榜预览</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 420px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 24px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .logo {
+            font-size: 14px;
+            color: #8b9dc3;
+            letter-spacing: 4px;
+            margin-bottom: 8px;
+        }
+
+        .title {
+            font-size: 28px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #FFD700, #FFA500);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+        }
+
+        .tabs {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #8b9dc3;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            border: 1px solid transparent;
+        }
+
+        .tab:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .tab.active {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 165, 0, 0.2));
+            color: #FFD700;
+            border-color: rgba(255, 215, 0, 0.3);
+        }
+
+        .rank-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .rank-item {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 16px;
+            padding: 16px;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .rank-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+            transform: translateX(4px);
+        }
+
+        .rank-item.gold {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 193, 7, 0.05));
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.1);
+        }
+
+        .rank-item.silver {
+            background: linear-gradient(135deg, rgba(192, 192, 192, 0.15), rgba(169, 169, 169, 0.05));
+            border: 1px solid rgba(192, 192, 192, 0.3);
+        }
+
+        .rank-item.bronze {
+            background: linear-gradient(135deg, rgba(205, 127, 50, 0.15), rgba(184, 115, 51, 0.05));
+            border: 1px solid rgba(205, 127, 50, 0.3);
+        }
+
+        .rank-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .rank-badge {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .gold .rank-badge {
+            background: linear-gradient(135deg, #FFD700, #FFA500);
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
+        }
+
+        .silver .rank-badge {
+            background: linear-gradient(135deg, #C0C0C0, #A8A8A8);
+            box-shadow: 0 0 15px rgba(192, 192, 192, 0.3);
+        }
+
+        .bronze .rank-badge {
+            background: linear-gradient(135deg, #CD7F32, #B87333);
+            box-shadow: 0 0 15px rgba(205, 127, 50, 0.3);
+        }
+
+        .rank-number {
+            font-size: 14px;
+            color: #8b9dc3;
+        }
+
+        .player-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: #ffffff;
+        }
+
+        .rank-stats {
+            display: flex;
+            justify-content: space-between;
+            padding-left: 48px;
+        }
+
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+        }
+
+        .stat-icon {
+            font-size: 14px;
+        }
+
+        .stat-value {
+            color: #3498DB;
+            font-weight: 600;
+        }
+
+        .stat-label {
+            color: #8b9dc3;
+        }
+
+        /* 普通排名样式 */
+        .rank-item.normal {
+            padding: 12px 16px;
+        }
+
+        .rank-item.normal .rank-header {
+            margin-bottom: 0;
+        }
+
+        .rank-item.normal .rank-badge {
+            width: 28px;
+            height: 28px;
+            background: rgba(255, 255, 255, 0.1);
+            font-size: 14px;
+        }
+
+        .rank-item.normal .player-name {
+            font-size: 14px;
+        }
+
+        .rank-item.normal .rank-stats {
+            padding-left: 40px;
+            margin-top: 4px;
+        }
+
+        .rank-item.normal .stat {
+            font-size: 12px;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 14px 24px;
+            border-radius: 12px;
+            border: none;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #27AE60, #2ECC71);
+            color: #fff;
+            box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(39, 174, 96, 0.4);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #8b9dc3;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
+        }
+
+        /* 动画 */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .rank-item {
+            animation: fadeInUp 0.5s ease forwards;
+            opacity: 0;
+        }
+
+        .rank-item:nth-child(1) { animation-delay: 0.1s; }
+        .rank-item:nth-child(2) { animation-delay: 0.2s; }
+        .rank-item:nth-child(3) { animation-delay: 0.3s; }
+        .rank-item:nth-child(4) { animation-delay: 0.4s; }
+        .rank-item:nth-child(5) { animation-delay: 0.5s; }
+        .rank-item:nth-child(6) { animation-delay: 0.6s; }
+        .rank-item:nth-child(7) { animation-delay: 0.7s; }
+
+        /* 星星装饰 */
+        .stars {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: -1;
+        }
+
+        .star {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: #fff;
+            border-radius: 50%;
+            opacity: 0.5;
+            animation: twinkle 3s infinite;
+        }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="stars" id="stars"></div>
+
+    <div class="container">
+        <div class="header">
+            <div class="logo">FOCUS PLANET</div>
+            <div class="title">排行榜</div>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab(this)">总榜</div>
+            <div class="tab" onclick="switchTab(this)">周榜</div>
+            <div class="tab" onclick="switchTab(this)">月榜</div>
+        </div>
+
+        <div class="rank-list">
+            <!-- 第一名 -->
+            <div class="rank-item gold">
+                <div class="rank-header">
+                    <div class="rank-badge">1</div>
+                    <div>
+                        <div class="player-name">星际探险家</div>
+                    </div>
+                </div>
+                <div class="rank-stats">
+                    <div class="stat">
+                        <span class="stat-icon">⏱</span>
+                        <span class="stat-value">00:45.320</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-icon">⭐</span>
+                        <span class="stat-value">98</span>
+                        <span class="stat-label">分</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 第二名 -->
+            <div class="rank-item silver">
+                <div class="rank-header">
+                    <div class="rank-badge">2</div>
+                    <div>
+                        <div class="player-name">宇宙旅行者</div>
+                    </div>
+                </div>
+                <div class="rank-stats">
+                    <div class="stat">
+                        <span class="stat-icon">⏱</span>
+                        <span class="stat-value">01:02.150</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-icon">⭐</span>
+                        <span class="stat-value">92</span>
+                        <span class="stat-label">分</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 第三名 -->
+            <div class="rank-item bronze">
+                <div class="rank-header">
+                    <div class="rank-badge">3</div>
+                    <div>
+                        <div class="player-name">银河漫游</div>
+                    </div>
+                </div>
+                <div class="rank-stats">
+                    <div class="stat">
+                        <span class="stat-icon">⏱</span>
+                        <span class="stat-value">01:15.890</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-icon">⭐</span>
+                        <span class="stat-value">88</span>
+                        <span class="stat-label">分</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 普通排名 -->
+            <div class="rank-item normal">
+                <div class="rank-header">
+                    <div class="rank-badge">4</div>
+                    <div class="player-name">玩家小明</div>
+                </div>
+                <div class="rank-stats">
+                    <div class="stat">
+                        <span class="stat-icon">⏱</span>
+                        <span class="stat-value">01:23.400</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-icon">⭐</span>
+                        <span class="stat-value">85</span>
+                        <span class="stat-label">分</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rank-item normal">
+                <div class="rank-header">
+                    <div class="rank-badge">5</div>
+                    <div class="player-name">快乐玩家</div>
+                </div>
+                <div class="rank-stats">
+                    <div class="stat">
+                        <span class="stat-icon">⏱</span>
+                        <span class="stat-value">01:30.200</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-icon">⭐</span>
+                        <span class="stat-value">82</span>
+                        <span class="stat-label">分</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rank-item normal">
+                <div class="rank-header">
+                    <div class="rank-badge">6</div>
+                    <div class="player-name">游戏达人</div>
+                </div>
+                <div class="rank-stats">
+                    <div class="stat">
+                        <span class="stat-icon">⏱</span>
+                        <span class="stat-value">01:45.600</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-icon">⭐</span>
+                        <span class="stat-value">78</span>
+                        <span class="stat-label">分</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rank-item normal">
+                <div class="rank-header">
+                    <div class="rank-badge">7</div>
+                    <div class="player-name">新手玩家</div>
+                </div>
+                <div class="rank-stats">
+                    <div class="stat">
+                        <span class="stat-icon">⏱</span>
+                        <span class="stat-value">02:10.300</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-icon">⭐</span>
+                        <span class="stat-value">72</span>
+                        <span class="stat-label">分</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="buttons">
+            <button class="btn btn-primary">
+                <span>🎮</span>
+                <span>再来一局</span>
+            </button>
+            <button class="btn btn-secondary">
+                <span>🏠</span>
+                <span>返回主页</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 生成星星背景
+        function createStars() {
+            const starsContainer = document.getElementById('stars');
+            for (let i = 0; i < 100; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                star.style.left = Math.random() * 100 + '%';
+                star.style.top = Math.random() * 100 + '%';
+                star.style.animationDelay = Math.random() * 3 + 's';
+                star.style.width = Math.random() * 2 + 1 + 'px';
+                star.style.height = star.style.width;
+                starsContainer.appendChild(star);
+            }
+        }
+
+        // Tab切换
+        function switchTab(element) {
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            element.classList.add('active');
+        }
+
+        createStars();
+    </script>
+</body>
+</html>
