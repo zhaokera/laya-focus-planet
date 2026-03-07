@@ -39,7 +39,7 @@ export class LeaderboardPanel extends Laya.Sprite {
     private contentLayer: Laya.Sprite = null;
     private tabContainer: Laya.Sprite = null;
     private listContainer: Laya.Sprite = null;
-    private scrollPanel: Laya.Panel = null;
+    private listMask: Laya.Sprite = null;
 
     private currentTab: number = 0; // 0:总榜, 1:周榜, 2:月榜
     private tabBtns: Laya.Sprite[] = [];
