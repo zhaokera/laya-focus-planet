@@ -241,30 +241,66 @@ export class LeaderboardPanel extends Laya.Sprite {
         const listW = 320;
         const listH = 370;
 
-        // 滚动面板
-        this.scrollPanel = new Laya.Panel();
-        this.scrollPanel.size(listW, listH);
-        this.scrollPanel.pos(panelX, listY);
-        this.scrollPanel.vScrollBarSkin = "";
-        this.scrollPanel.elasticEnabled = true;
-        this.contentLayer.addChild(this.scrollPanel);
+        // 使用普通 Sprite 替代 Panel
+        this.listMask = new Laya.Sprite();
+        this.listMask.size(listW, listH);
+        this.listMask.pos(panelX, listY);
+        // 设置滚动区域
+        this.listMask.scrollRect = new Laya.Rectangle(0, 0, listW, listH);
+        this.contentLayer.addChild(this.listMask);
 
         this.listContainer = new Laya.Sprite();
         this.listContainer.size(listW, listH);
-        this.scrollPanel.addChild(this.listContainer);
+        this.listMask.addChild(this.listContainer);
+
+        // 添加触摸滚动支持
+        this.setupScrolling();
 
         this.refreshList();
     }
 
+    private scrollStartY: number = 0;
+    private scrollOffset: number = 0;
+    private maxScroll: number = 0;
+
+    private setupScrolling(): void {
+        this.listMask.on(Event.MOUSE_DOWN, this, this.onScrollStart);
+        this.listMask.on(Event.MOUSE_MOVE, this, this.onScrollMove);
+        this.listMask.on(Event.MOUSE_UP, this, this.onScrollEnd);
+        this.listMask.on(Event.MOUSE_OUT, this, this.onScrollEnd);
+    }
+
+    private onScrollStart(e: Laya.Event): void {
+        this.scrollStartY = e.stageY;
+    }
+
+    private onScrollMove(e: Laya.Event): void {
+        if (this.scrollStartY === 0) return;
+        const deltaY = e.stageY - this.scrollStartY;
+        this.scrollStartY = e.stageY;
+
+        const newOffset = this.scrollOffset + deltaY;
+        this.scrollOffset = Math.max(0, Math.min(this.maxScroll, newOffset));
+        this.listContainer.y = -this.scrollOffset;
+    }
+
+    private onScrollEnd(): void {
+        this.scrollStartY = 0;
+    }
+
     private refreshList(): void {
         this.listContainer.removeChildren();
+        this.scrollOffset = 0;
+        this.listContainer.y = 0;
 
         const records = this.getRankData();
         const itemH = 58;
         const listW = 320;
+        const listH = 370;
 
         if (records.length === 0) {
             this.showEmptyState();
+            this.maxScroll = 0;
             return;
         }
 
@@ -278,7 +314,9 @@ export class LeaderboardPanel extends Laya.Sprite {
             Laya.Tween.to(item, { alpha: 1 }, 300, null, null, index * 80);
         });
 
-        this.listContainer.height = Math.max(records.length * itemH, 370);
+        const totalHeight = records.length * itemH;
+        this.maxScroll = Math.max(0, totalHeight - listH);
+        this.listContainer.height = totalHeight;
     }
 
     private createRankItem(data: RankRecord, index: number, w: number, h: number): Laya.Sprite {
@@ -625,6 +663,15 @@ export class LeaderboardPanel extends Laya.Sprite {
         Laya.Tween.clearAll(this.bgLayer);
         Laya.Tween.clearAll(this.contentLayer);
         Laya.Tween.clearAll(this.listContainer);
+
+        // 清除滚动事件
+        if (this.listMask) {
+            this.listMask.off(Event.MOUSE_DOWN, this, this.onScrollStart);
+            this.listMask.off(Event.MOUSE_MOVE, this, this.onScrollMove);
+            this.listMask.off(Event.MOUSE_UP, this, this.onScrollEnd);
+            this.listMask.off(Event.MOUSE_OUT, this, this.onScrollEnd);
+        }
+
         super.destroy();
     }
 }
