@@ -40,6 +40,7 @@ export class LeaderboardPanel extends Laya.Scene {
     private root: Laya.Sprite = null;
     private stageBg: Laya.Sprite = null;
     private bgLayer: Laya.Sprite = null;
+    private panelContainer: Laya.Sprite = null;
     private contentLayer: Laya.Sprite = null;
     private tabContainer: Laya.Sprite = null;
     private listContainer: Laya.Sprite = null;
@@ -108,17 +109,31 @@ export class LeaderboardPanel extends Laya.Scene {
     }
 
     private initPanel(): void {
+        // 面板参数
+        const panelW = 340;
+        const panelH = 580;
+        const panelX = (this.BASE_W - panelW) * 0.5;
+        const panelY = 50;
+
         // 半透明遮罩背景
         this.bgLayer = new Laya.Sprite();
         this.bgLayer.graphics.drawRect(0, 0, this.BASE_W, this.BASE_H, "rgba(0,0,0,0.6)");
         this.bgLayer.alpha = 0;
         this.root.addChild(this.bgLayer);
 
-        // 内容层
-        this.contentLayer = new Laya.Sprite();
-        this.root.addChild(this.contentLayer);
+        // 主面板容器 - 包含所有面板元素
+        this.panelContainer = new Laya.Sprite();
+        this.panelContainer.pos(panelX, panelY);
+        this.panelContainer.size(panelW, panelH);
+        this.root.addChild(this.panelContainer);
 
-        this.createMainPanel();
+        // 面板背景（阴影 + 主体）
+        this.createPanelBackground(panelW, panelH);
+
+        // 面板内容层 - 所有内容元素放在这里
+        this.contentLayer = new Laya.Sprite();
+        this.panelContainer.addChild(this.contentLayer);
+
         this.createTitle();
         this.createTabs();
         this.createScrollList();
@@ -128,31 +143,21 @@ export class LeaderboardPanel extends Laya.Scene {
         this.playEnterAnimation();
     }
 
-    private createMainPanel(): void {
-        const panelW = 340;
-        const panelH = 580;
-        const panelX = (this.BASE_W - panelW) * 0.5;
-        const panelY = 50;
-
-        // 面板阴影
+    private createPanelBackground(panelW: number, panelH: number): void {
+        // 面板阴影 - 在面板下方
         const shadow = new Laya.Sprite();
-        shadow.graphics.drawRoundRect(panelX + 6, panelY + 6, panelW, panelH, 24, "rgba(0,0,0,0.4)");
-        this.contentLayer.addChild(shadow);
+        shadow.graphics.drawRoundRect(6, 6, panelW, panelH, 24, "rgba(0,0,0,0.4)");
+        this.panelContainer.addChild(shadow);
 
-        // 面板主体 - 毛玻璃效果背景
-        const panel = new Laya.Sprite();
-        panel.size(panelW, panelH);
-        panel.pos(panelX, panelY);
-
-        // 绘制圆角矩形背景
-        const g = panel.graphics;
-        g.clear();
+        // 面板主体 - 圆角矩形背景
+        const panelBg = new Laya.Sprite();
+        panelBg.size(panelW, panelH);
+        const g = panelBg.graphics;
         this.drawRoundRect(g, 0, 0, panelW, panelH, 24, this.COLORS.panelBg);
-
-        this.contentLayer.addChild(panel);
+        this.panelContainer.addChild(panelBg);
 
         // 装饰性边角
-        this.drawPanelCorners(panel, panelW, panelH);
+        this.drawPanelCorners(panelBg, panelW, panelH);
     }
 
     private drawRoundRect(g: Laya.Graphics, x: number, y: number, w: number, h: number, r: number, color: string): void {
@@ -189,15 +194,17 @@ export class LeaderboardPanel extends Laya.Scene {
     }
 
     private createTitle(): void {
+        const panelW = 340;
+
         // Logo文字
         const logoText = new Laya.Text();
         logoText.text = "FOCUS PLANET";
         logoText.font = "Microsoft YaHei";
         logoText.fontSize = 12;
         logoText.color = this.COLORS.textMuted;
-        logoText.width = this.BASE_W;
+        logoText.width = panelW;
         logoText.align = "center";
-        logoText.pos(0, 66);
+        logoText.pos(0, 16);
         this.contentLayer.addChild(logoText);
 
         // 主标题
@@ -209,9 +216,9 @@ export class LeaderboardPanel extends Laya.Scene {
         titleText.color = this.COLORS.title;
         titleText.stroke = 2;
         titleText.strokeColor = "rgba(255,165,0,0.3)";
-        titleText.width = this.BASE_W;
+        titleText.width = panelW;
         titleText.align = "center";
-        titleText.pos(0, 84);
+        titleText.pos(0, 34);
         this.contentLayer.addChild(titleText);
     }
 
@@ -220,8 +227,9 @@ export class LeaderboardPanel extends Laya.Scene {
         const tabWidth = 70;
         const tabHeight = 32;
         const gap = 12;
-        const startX = (this.BASE_W - (tabs.length * tabWidth + (tabs.length - 1) * gap)) / 2;
-        const tabY = 130;
+        const panelW = 340;
+        const startX = (panelW - (tabs.length * tabWidth + (tabs.length - 1) * gap)) / 2;
+        const tabY = 80;
 
         this.tabContainer = new Laya.Sprite();
         this.tabContainer.pos(0, 0);
@@ -289,15 +297,16 @@ export class LeaderboardPanel extends Laya.Scene {
     }
 
     private createScrollList(): void {
-        const panelX = (this.BASE_W - 320) * 0.5;
-        const listY = 175;
         const listW = 320;
         const listH = 370;
+        const panelW = 340;
+        const listX = (panelW - listW) * 0.5;
+        const listY = 125;
 
         // 使用普通 Sprite 替代 Panel
         this.listMask = new Laya.Sprite();
         this.listMask.size(listW, listH);
-        this.listMask.pos(panelX, listY);
+        this.listMask.pos(listX, listY);
         // 设置滚动区域
         this.listMask.scrollRect = new Laya.Rectangle(0, 0, listW, listH);
         this.contentLayer.addChild(this.listMask);
@@ -498,8 +507,9 @@ export class LeaderboardPanel extends Laya.Scene {
         const btnW = 130;
         const btnH = 44;
         const gap = 20;
-        const startX = (this.BASE_W - (btnW * 2 + gap)) / 2;
-        const btnY = 570;
+        const panelW = 340;
+        const startX = (panelW - (btnW * 2 + gap)) / 2;
+        const btnY = 520;
 
         // 再来一局按钮
         const primaryBtn = this.createButton("再来一局", btnW, btnH, true);
@@ -564,16 +574,16 @@ export class LeaderboardPanel extends Laya.Scene {
 
     private playEnterAnimation(): void {
         this.bgLayer.alpha = 0;
-        this.contentLayer.scale(0.9, 0.9);
-        this.contentLayer.alpha = 0;
+        this.panelContainer.scale(0.9, 0.9);
+        this.panelContainer.alpha = 0;
 
         Laya.Tween.to(this.bgLayer, { alpha: 1 }, 200);
-        Laya.Tween.to(this.contentLayer, { scaleX: 1, scaleY: 1, alpha: 1 }, 250, Laya.Ease.backOut);
+        Laya.Tween.to(this.panelContainer, { scaleX: 1, scaleY: 1, alpha: 1 }, 250, Laya.Ease.backOut);
     }
 
     private playExitAnimation(callback: () => void): void {
         Laya.Tween.to(this.bgLayer, { alpha: 0 }, 150);
-        Laya.Tween.to(this.contentLayer, { scaleX: 0.9, scaleY: 0.9, alpha: 0 }, 150, Laya.Ease.backIn, Laya.Handler.create(null, callback));
+        Laya.Tween.to(this.panelContainer, { scaleX: 0.9, scaleY: 0.9, alpha: 0 }, 150, Laya.Ease.backIn, Laya.Handler.create(null, callback));
     }
 
     // ==================== 数据管理 ====================
@@ -705,7 +715,7 @@ export class LeaderboardPanel extends Laya.Scene {
         Laya.stage.off(Event.RESIZE, this, this.onResize);
 
         Laya.Tween.clearAll(this.bgLayer);
-        Laya.Tween.clearAll(this.contentLayer);
+        Laya.Tween.clearAll(this.panelContainer);
         Laya.Tween.clearAll(this.listContainer);
 
         // 清除滚动事件
