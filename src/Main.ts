@@ -2,6 +2,9 @@ const { regClass, Event } = Laya;
 import { GameScene } from "./GameScene";
 import { LeaderboardPanel } from "./LeaderboardPanel";
 import { ChallengeSelectPanel } from "./ChallengeSelectPanel";
+import { GameSelectPanel } from "./GameSelectPanel";
+import { SettingsPanel } from "./SettingsPanel";
+import { SoundManager } from "./SoundManager";
 
 @regClass("84f89060-d701-4411-b5dc-ae6e4a05aed0", "../src/Main.ts")
 export class Main extends Laya.Scene {
@@ -164,6 +167,7 @@ export class Main extends Laya.Scene {
 
             const onTap = () => {
                 console.log("[Home] click:", d.label);
+                SoundManager.playClick(); // 播放点击音
                 wrap.scale(0.97, 0.97);
                 wrap.alpha = 0.92;
                 onRelease();
@@ -171,14 +175,13 @@ export class Main extends Laya.Scene {
                 if (d.action === "start") {
                     if (this._isStarting) return;
                     this._isStarting = true;
-                    this.currentDifficulty = 5;
-                    this.startGame();
+                    this.showGameSelect();
                 } else if (d.action === "challenge") {
                     this.showChallengeSelect();
                 } else if (d.action === "rank") {
                     this.showLeaderboard();
                 } else if (d.action === "settings") {
-                    console.log("[Home] settings clicked");
+                    this.showSettings();
                 }
             };
 
@@ -285,6 +288,22 @@ export class Main extends Laya.Scene {
         // 打开挑战模式选择面板
         const panel = new ChallengeSelectPanel();
         panel.name = "ChallengeSelectPanel";
+        Laya.stage.addChild(panel);
+        this.destroy();
+    }
+
+    private showGameSelect(): void {
+        // 打开游戏选择面板
+        const panel = new GameSelectPanel();
+        panel.name = "GameSelectPanel";
+        Laya.stage.addChild(panel);
+        this.destroy();
+    }
+
+    private showSettings(): void {
+        // 打开设置页面
+        const panel = new SettingsPanel();
+        panel.name = "SettingsPanel";
         Laya.stage.addChild(panel);
         this.destroy();
     }
