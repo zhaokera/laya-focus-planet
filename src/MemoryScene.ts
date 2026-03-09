@@ -6,6 +6,7 @@ const { regClass, Event } = Laya;
 
 import { MemoryCell } from "./MemoryCell";
 import { SoundManager } from "./SoundManager";
+import { LeaderboardPanel } from "./LeaderboardPanel";
 
 // 关卡配置接口
 interface LevelConfig {
@@ -639,6 +640,9 @@ export class MemoryScene extends Laya.Scene {
 
         // 保存最高分
         this.saveBestScore();
+
+        // 保存到排行榜
+        LeaderboardPanel.addMemoryRecord(this._score, this._currentLevel, "玩家");
 
         // 显示结果弹窗
         this.showResultPopup();

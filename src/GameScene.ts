@@ -1,6 +1,8 @@
 const { regClass, Event } = Laya;
 
 import { GridCell } from "./GridCell";
+import { SoundManager } from "./SoundManager";
+import { LeaderboardPanel } from "./LeaderboardPanel";
 
 @regClass("game_scene", "../src/GameScene.ts")
 export class GameScene extends Laya.Scene {
@@ -70,6 +72,7 @@ export class GameScene extends Laya.Scene {
 
         this.createBackground();
         this.createTitle();
+        this.createBackButton();
         this.createHudPanel();
         this.createDifficultyButtons();
         this.createGamePanelAndGrid();
@@ -191,6 +194,40 @@ export class GameScene extends Laya.Scene {
         this.titleText.align = "center";
         this.titleText.pos(0, 30);
         this.uiLayer.addChild(this.titleText);
+    }
+
+    private createBackButton(): void {
+        const btn = new Laya.Sprite();
+        btn.size(60, 32);
+        btn.pos(16, 28);
+        btn.mouseEnabled = true;
+
+        // 背景
+        btn.graphics.drawRoundRect(0, 0, 60, 32, 8, "rgba(255,255,255,0.1)", "rgba(255,255,255,0.2)", 1);
+
+        // 文字
+        const text = new Laya.Text();
+        text.text = "← 返回";
+        text.font = "Microsoft YaHei";
+        text.fontSize = 14;
+        text.color = "#FFFFFF";
+        text.width = 60;
+        text.height = 32;
+        text.align = "center";
+        text.valign = "middle";
+        btn.addChild(text);
+
+        btn.on(Event.CLICK, this, this.goBackToMain);
+        this.uiLayer.addChild(btn);
+    }
+
+    private goBackToMain(): void {
+        import("./Main").then((module) => {
+            const mainScene = new module.Main();
+            mainScene.name = "Main";
+            Laya.stage.addChild(mainScene);
+            this.destroy();
+        });
     }
 
     private createHudPanel(): void {
@@ -585,11 +622,13 @@ export class GameScene extends Laya.Scene {
         if (cell.isLocked()) return;
 
         cell.markCompleted();
+        SoundManager.playCorrect(); // 播放正确音
         this._currentNumber++;
         this.updateTargetDisplay();
 
         if (this._currentNumber > this._totalNumbers) {
             this._isPlaying = false;
+            SoundManager.playComplete(); // 播放完成音
             this.showPopup();
             return;
         }
@@ -601,6 +640,7 @@ export class GameScene extends Laya.Scene {
         this._errors++;
         this.updateErrorDisplay();
         cell.showError();
+        SoundManager.playWrong(); // 播放错误音
 
         const ox = this.root.x;
         this.root.x = ox - 4;
@@ -643,11 +683,15 @@ export class GameScene extends Laya.Scene {
     }
 
     private showPopup(): void {
-        const elapsedSec = Math.floor((Laya.timer.currTimer - this._startTime) / 1000);
+        const elapsed = Laya.timer.currTimer - this._startTime;
+        const elapsedSec = Math.floor(elapsed / 1000);
         const result = this.popupPanel.getChildByName("popup_result") as Laya.Text;
         if (result) {
             result.text = `用时: ${elapsedSec}秒\n错误: ${this._errors}次`;
         }
+
+        // 保存到排行榜
+        LeaderboardPanel.addSchulteRecord(elapsed, this._errors, "玩家");
 
         this.popupOverlay.visible = true;
         this.popupOverlay.alpha = 1;

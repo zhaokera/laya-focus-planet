@@ -1,12 +1,33 @@
 /**
  * 排行榜页面 - Focus Planet
  * 风格：深空主题，金银铜前三名高亮
+ * 支持多游戏类型排行榜
  */
 
 const { Event } = Laya;
 
 import { Main } from "./Main";
 
+// 游戏类型定义
+export type LeaderboardGameType = "schulte" | "memory";
+
+// 舒尔特方格记录
+interface SchulteRecord {
+    timeMs: number;
+    errors: number;
+    name: string;
+    date: number;
+}
+
+// 记忆闪现记录
+interface MemoryRecord {
+    score: number;
+    level: number;
+    name: string;
+    date: number;
+}
+
+// 显示用统一记录格式
 interface RankRecord {
     rank: number;
     name: string;
@@ -14,7 +35,15 @@ interface RankRecord {
     score: number;
     timeMs: number;
     errors: number;
+    level: number;
     date: number;
+}
+
+// 游戏类型配置
+interface GameTypeConfig {
+    type: LeaderboardGameType;
+    label: string;
+    icon?: string;
 }
 
 export class LeaderboardPanel extends Laya.Scene {
@@ -37,7 +66,11 @@ export class LeaderboardPanel extends Laya.Scene {
         btnSecondary: "rgba(255,255,255,0.1)"
     };
 
-    private readonly STORAGE_KEY = "focus_planet_leaderboard";
+    // 游戏类型配置
+    private readonly GAME_TYPES: GameTypeConfig[] = [
+        { type: "schulte", label: "舒尔特方格" },
+        { type: "memory", label: "记忆闪现" }
+    ];
 
     private root: Laya.Sprite = null;
     private stageBg: Laya.Sprite = null;
@@ -45,12 +78,15 @@ export class LeaderboardPanel extends Laya.Scene {
     private bgLayer: Laya.Sprite = null;
     private panelContainer: Laya.Sprite = null;
     private contentLayer: Laya.Sprite = null;
+    private gameTypeContainer: Laya.Sprite = null;
     private tabContainer: Laya.Sprite = null;
     private listContainer: Laya.Sprite = null;
     private listMask: Laya.Sprite = null;
     private stars: Laya.Sprite[] = [];
 
+    private currentGameType: LeaderboardGameType = "schulte";
     private currentTab: number = 0; // 0:总榜, 1:周榜, 2:月榜
+    private gameTypeBtns: Laya.Sprite[] = [];
     private tabBtns: Laya.Sprite[] = [];
 
     constructor() {
@@ -193,9 +229,9 @@ export class LeaderboardPanel extends Laya.Scene {
     private initPanel(): void {
         // 面板参数 - 调整为更紧凑的布局
         const panelW = 340;
-        const panelH = 560;
+        const panelH = 600; // 增加高度以容纳游戏类型选择
         const panelX = (this.BASE_W - panelW) * 0.5;
-        const panelY = 60;
+        const panelY = 40;
 
         // 半透明遮罩背景
         this.bgLayer = new Laya.Sprite();
@@ -217,6 +253,7 @@ export class LeaderboardPanel extends Laya.Scene {
         this.panelContainer.addChild(this.contentLayer);
 
         this.createTitle();
+        this.createGameTypeTabs();
         this.createTabs();
         this.createScrollList();
         this.createButtons();
@@ -281,32 +318,140 @@ export class LeaderboardPanel extends Laya.Scene {
         logoText.color = this.COLORS.textMuted;
         logoText.width = panelW;
         logoText.align = "center";
-        logoText.pos(0, 16);
+        logoText.pos(0, 12);
         this.contentLayer.addChild(logoText);
 
         // 主标题
         const titleText = new Laya.Text();
         titleText.text = "排 行 榜";
         titleText.font = "Microsoft YaHei";
-        titleText.fontSize = 26;
+        titleText.fontSize = 24;
         titleText.bold = true;
         titleText.color = this.COLORS.title;
         titleText.stroke = 2;
         titleText.strokeColor = "rgba(255,165,0,0.3)";
         titleText.width = panelW;
         titleText.align = "center";
-        titleText.pos(0, 34);
+        titleText.pos(0, 28);
         this.contentLayer.addChild(titleText);
+    }
+
+    /**
+     * 创建游戏类型选择 Tab
+     */
+    private createGameTypeTabs(): void {
+        const tabWidth = 100;
+        const tabHeight = 32;
+        const gap = 16;
+        const panelW = 340;
+        const startX = (panelW - (this.GAME_TYPES.length * tabWidth + (this.GAME_TYPES.length - 1) * gap)) / 2;
+        const tabY = 60;
+
+        this.gameTypeContainer = new Laya.Sprite();
+        this.gameTypeContainer.pos(0, 0);
+        this.contentLayer.addChild(this.gameTypeContainer);
+
+        this.GAME_TYPES.forEach((gameConfig, index) => {
+            const tab = new Laya.Sprite();
+            tab.size(tabWidth, tabHeight);
+            tab.pos(startX + index * (tabWidth + gap), tabY);
+            tab.mouseEnabled = true;
+
+            this.updateGameTypeTabStyle(tab, gameConfig.type === this.currentGameType);
+
+            const text = new Laya.Text();
+            text.name = "label";
+            text.text = gameConfig.label;
+            text.font = "Microsoft YaHei";
+            text.fontSize = 13;
+            text.bold = gameConfig.type === this.currentGameType;
+            text.color = gameConfig.type === this.currentGameType ? this.COLORS.title : this.COLORS.textMuted;
+            text.width = tabWidth;
+            text.height = tabHeight;
+            text.align = "center";
+            text.valign = "middle";
+            tab.addChild(text);
+
+            tab.on(Event.CLICK, this, () => this.onGameTypeClick(gameConfig.type));
+
+            this.gameTypeBtns.push(tab);
+            this.gameTypeContainer.addChild(tab);
+        });
+    }
+
+    private updateGameTypeTabStyle(tab: Laya.Sprite, active: boolean): void {
+        const g = tab.graphics;
+        g.clear();
+
+        if (active) {
+            // 激活状态 - 紫色渐变背景
+            const steps = 6;
+            for (let i = 0; i < steps; i++) {
+                const ratio = i / steps;
+                const nextRatio = (i + 1) / steps;
+                const x1 = tab.width * ratio;
+                const x2 = tab.width * nextRatio;
+                const w = x2 - x1;
+
+                const alpha = 0.12 + ratio * 0.12;
+                const color = `rgba(139,92,246,${alpha})`;
+                g.drawRect(x1, 0, w + 1, tab.height, color);
+            }
+            // 边框
+            g.drawRoundRect(0, 0, tab.width, tab.height, 16, null, "rgba(139,92,246,0.6)", 1.5);
+        } else {
+            // 非激活状态 - 半透明背景 + 边框
+            g.drawRoundRect(0, 0, tab.width, tab.height, 16,
+                "rgba(255,255,255,0.03)",
+                "rgba(255,255,255,0.1)",
+                1
+            );
+        }
+    }
+
+    private onGameTypeClick(gameType: LeaderboardGameType): void {
+        if (this.currentGameType === gameType) return;
+
+        this.currentGameType = gameType;
+
+        // 更新游戏类型Tab样式
+        this.gameTypeBtns.forEach((tab, i) => {
+            const isActive = this.GAME_TYPES[i].type === gameType;
+            this.updateGameTypeTabStyle(tab, isActive);
+            const text = tab.getChildByName("label") as Laya.Text;
+            if (text) {
+                text.color = isActive ? this.COLORS.title : this.COLORS.textMuted;
+                text.bold = isActive;
+            }
+        });
+
+        // 重置时间Tab到总榜
+        this.currentTab = 0;
+        this.updateTimeTabs();
+
+        // 重新渲染列表
+        this.refreshList();
+    }
+
+    private updateTimeTabs(): void {
+        this.tabBtns.forEach((tab, i) => {
+            this.updateTabStyle(tab, i === this.currentTab);
+            const text = tab.getChildByName("label") as Laya.Text;
+            if (text) {
+                text.color = i === this.currentTab ? this.COLORS.title : this.COLORS.textMuted;
+                text.bold = i === this.currentTab;
+            }
+        });
     }
 
     private createTabs(): void {
         const tabs = ["总榜", "周榜", "月榜"];
         const tabWidth = 72;
-        const tabHeight = 36;
+        const tabHeight = 32;
         const gap = 12;
         const panelW = 340;
         const startX = (panelW - (tabs.length * tabWidth + (tabs.length - 1) * gap)) / 2;
-        const tabY = 80;
+        const tabY = 100; // 调整位置，为游戏类型Tab留出空间
 
         this.tabContainer = new Laya.Sprite();
         this.tabContainer.pos(0, 0);
@@ -377,14 +522,7 @@ export class LeaderboardPanel extends Laya.Scene {
         this.currentTab = index;
 
         // 更新Tab样式
-        this.tabBtns.forEach((tab, i) => {
-            this.updateTabStyle(tab, i === index);
-            const text = tab.getChildByName("label") as Laya.Text;
-            if (text) {
-                text.color = i === index ? this.COLORS.title : this.COLORS.textMuted;
-                text.bold = i === index;
-            }
-        });
+        this.updateTimeTabs();
 
         // 重新渲染列表
         this.refreshList();
@@ -392,10 +530,10 @@ export class LeaderboardPanel extends Laya.Scene {
 
     private createScrollList(): void {
         const listW = 320;
-        const listH = 360;
+        const listH = 340; // 调整列表高度
         const panelW = 340;
         const listX = (panelW - listW) * 0.5;
-        const listY = 130;
+        const listY = 145; // 调整位置
 
         // 使用普通 Sprite 替代 Panel
         this.listMask = new Laya.Sprite();
@@ -594,24 +732,44 @@ export class LeaderboardPanel extends Laya.Scene {
         nameText.pos(52, isTop3 ? 8 : 6);
         item.addChild(nameText);
 
-        // 时间和分数 - 水平排列
+        // 根据游戏类型显示不同的信息
         const statsY = isTop3 ? 24 : 22;
 
-        const timeText = new Laya.Text();
-        timeText.text = data.time;
-        timeText.font = "Microsoft YaHei";
-        timeText.fontSize = 11;
-        timeText.color = this.COLORS.accent;
-        timeText.pos(52, statsY);
-        item.addChild(timeText);
+        if (this.currentGameType === "schulte") {
+            // 舒尔特方格：用时 + 分数
+            const timeText = new Laya.Text();
+            timeText.text = data.time;
+            timeText.font = "Microsoft YaHei";
+            timeText.fontSize = 11;
+            timeText.color = this.COLORS.accent;
+            timeText.pos(52, statsY);
+            item.addChild(timeText);
 
-        const scoreText = new Laya.Text();
-        scoreText.text = data.score + "分";
-        scoreText.font = "Microsoft YaHei";
-        scoreText.fontSize = 11;
-        scoreText.color = this.COLORS.textMuted;
-        scoreText.pos(140, statsY);
-        item.addChild(scoreText);
+            const scoreText = new Laya.Text();
+            scoreText.text = data.score + "分";
+            scoreText.font = "Microsoft YaHei";
+            scoreText.fontSize = 11;
+            scoreText.color = this.COLORS.textMuted;
+            scoreText.pos(140, statsY);
+            item.addChild(scoreText);
+        } else {
+            // 记忆闪现：关卡 + 分数
+            const levelText = new Laya.Text();
+            levelText.text = `关卡 ${data.level}`;
+            levelText.font = "Microsoft YaHei";
+            levelText.fontSize = 11;
+            levelText.color = this.COLORS.accent;
+            levelText.pos(52, statsY);
+            item.addChild(levelText);
+
+            const scoreText = new Laya.Text();
+            scoreText.text = data.score + "分";
+            scoreText.font = "Microsoft YaHei";
+            scoreText.fontSize = 11;
+            scoreText.color = this.COLORS.textMuted;
+            scoreText.pos(130, statsY);
+            item.addChild(scoreText);
+        }
 
         return item;
     }
@@ -636,7 +794,7 @@ export class LeaderboardPanel extends Laya.Scene {
         const gap = 20;
         const panelW = 340;
         const startX = (panelW - (btnW * 2 + gap)) / 2;
-        const btnY = 500;
+        const btnY = 530; // 调整按钮位置
 
         // 再来一局按钮
         const primaryBtn = this.createButton("再来一局", btnW, btnH, true);
@@ -718,24 +876,48 @@ export class LeaderboardPanel extends Laya.Scene {
 
     // ==================== 数据管理 ====================
 
+    /**
+     * 获取存储 Key
+     */
+    private getStorageKey(): string {
+        return `focus_planet_${this.currentGameType}_leaderboard`;
+    }
+
     private getRankData(): RankRecord[] {
         // 从本地存储获取数据
-        const storageKey = `${this.STORAGE_KEY}_${this.currentTab}`;
+        const storageKey = `${this.getStorageKey()}_${this.currentTab}`;
         let records: RankRecord[] = [];
 
         try {
             const data = Laya.LocalStorage.getItem(storageKey);
             if (data) {
                 const parsed = JSON.parse(data);
-                records = parsed.map((r: any, i: number) => ({
-                    rank: i + 1,
-                    name: r.name || "匿名玩家",
-                    time: this.formatTime(r.timeMs || r.time),
-                    score: this.calculateScore(r.timeMs || r.time, r.errors),
-                    timeMs: r.timeMs || r.time,
-                    errors: r.errors,
-                    date: r.date
-                }));
+                records = parsed.map((r: any, i: number) => {
+                    if (this.currentGameType === "schulte") {
+                        return {
+                            rank: i + 1,
+                            name: r.name || "匿名玩家",
+                            time: this.formatTime(r.timeMs || r.time),
+                            score: this.calculateSchulteScore(r.timeMs || r.time, r.errors),
+                            timeMs: r.timeMs || r.time,
+                            errors: r.errors,
+                            level: 0,
+                            date: r.date
+                        };
+                    } else {
+                        // 记忆闪现
+                        return {
+                            rank: i + 1,
+                            name: r.name || "匿名玩家",
+                            time: `关卡 ${r.level || 1}`,
+                            score: r.score || 0,
+                            timeMs: 0,
+                            errors: 0,
+                            level: r.level || 1,
+                            date: r.date
+                        };
+                    }
+                });
             }
         } catch (e) {
             console.warn("读取排行榜数据失败", e);
@@ -750,28 +932,38 @@ export class LeaderboardPanel extends Laya.Scene {
     }
 
     private getMockData(): RankRecord[] {
-        const mockData = [
-            { rank: 1, name: "星际探险家", time: "00:45.320", score: 98 },
-            { rank: 2, name: "宇宙旅行者", time: "01:02.150", score: 92 },
-            { rank: 3, name: "银河漫游", time: "01:15.890", score: 88 },
-            { rank: 4, name: "玩家小明", time: "01:23.400", score: 85 },
-            { rank: 5, name: "快乐玩家", time: "01:30.200", score: 82 },
-            { rank: 6, name: "游戏达人", time: "01:45.600", score: 78 },
-            { rank: 7, name: "新手玩家", time: "02:10.300", score: 72 }
-        ];
-
-        return mockData;
+        if (this.currentGameType === "schulte") {
+            const mockData = [
+                { rank: 1, name: "星际探险家", time: "00:45.320", score: 98, timeMs: 45320, errors: 0, level: 0, date: Date.now() },
+                { rank: 2, name: "宇宙旅行者", time: "01:02.150", score: 92, timeMs: 62150, errors: 1, level: 0, date: Date.now() },
+                { rank: 3, name: "银河漫游", time: "01:15.890", score: 88, timeMs: 75890, errors: 2, level: 0, date: Date.now() },
+                { rank: 4, name: "玩家小明", time: "01:23.400", score: 85, timeMs: 83400, errors: 1, level: 0, date: Date.now() },
+                { rank: 5, name: "快乐玩家", time: "01:30.200", score: 82, timeMs: 90200, errors: 3, level: 0, date: Date.now() }
+            ];
+            return mockData;
+        } else {
+            // 记忆闪现模拟数据
+            const mockData = [
+                { rank: 1, name: "记忆大师", time: "关卡 8", score: 2580, timeMs: 0, errors: 0, level: 8, date: Date.now() },
+                { rank: 2, name: "闪现高手", time: "关卡 6", score: 1890, timeMs: 0, errors: 0, level: 6, date: Date.now() },
+                { rank: 3, name: "脑力达人", time: "关卡 5", score: 1520, timeMs: 0, errors: 0, level: 5, date: Date.now() },
+                { rank: 4, name: "新手玩家", time: "关卡 3", score: 890, timeMs: 0, errors: 0, level: 3, date: Date.now() },
+                { rank: 5, name: "挑战者", time: "关卡 2", score: 450, timeMs: 0, errors: 0, level: 2, date: Date.now() }
+            ];
+            return mockData;
+        }
     }
 
     /**
-     * 添加一条排行榜记录
+     * 添加一条舒尔特方格排行榜记录
      */
-    public static addRecord(timeMs: number, errors: number, name: string = "匿名玩家"): void {
-        const STORAGE_KEY = "focus_planet_leaderboard";
+    public static addSchulteRecord(timeMs: number, errors: number, name: string = "匿名玩家"): void {
+        const STORAGE_KEY = "focus_planet_schulte_leaderboard";
+        const record = { timeMs, errors, name, date: Date.now() };
 
         // 总榜
         const totalRecords = LeaderboardPanel.loadRecords(STORAGE_KEY, 0);
-        totalRecords.push({ timeMs, errors, name, date: Date.now() });
+        totalRecords.push(record);
         totalRecords.sort((a, b) => {
             if (a.timeMs !== b.timeMs) return a.timeMs - b.timeMs;
             return a.errors - b.errors;
@@ -782,7 +974,7 @@ export class LeaderboardPanel extends Laya.Scene {
         const weekRecords = LeaderboardPanel.loadRecords(STORAGE_KEY, 1);
         const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
         const filteredWeek = weekRecords.filter(r => r.date > weekAgo);
-        filteredWeek.push({ timeMs, errors, name, date: Date.now() });
+        filteredWeek.push(record);
         filteredWeek.sort((a, b) => {
             if (a.timeMs !== b.timeMs) return a.timeMs - b.timeMs;
             return a.errors - b.errors;
@@ -793,7 +985,7 @@ export class LeaderboardPanel extends Laya.Scene {
         const monthRecords = LeaderboardPanel.loadRecords(STORAGE_KEY, 2);
         const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
         const filteredMonth = monthRecords.filter(r => r.date > monthAgo);
-        filteredMonth.push({ timeMs, errors, name, date: Date.now() });
+        filteredMonth.push(record);
         filteredMonth.sort((a, b) => {
             if (a.timeMs !== b.timeMs) return a.timeMs - b.timeMs;
             return a.errors - b.errors;
@@ -801,7 +993,54 @@ export class LeaderboardPanel extends Laya.Scene {
         LeaderboardPanel.saveRecords(STORAGE_KEY, 2, filteredMonth.slice(0, 50));
     }
 
-    private static loadRecords(storageKey: string, tab: number): any[] {
+    /**
+     * 添加一条记忆闪现排行榜记录
+     */
+    public static addMemoryRecord(score: number, level: number, name: string = "匿名玩家"): void {
+        const STORAGE_KEY = "focus_planet_memory_leaderboard";
+        const record = { score, level, name, date: Date.now() };
+
+        // 总榜 - 按分数降序，分数相同按关卡降序
+        const totalRecords = LeaderboardPanel.loadMemoryRecords(STORAGE_KEY, 0);
+        totalRecords.push(record);
+        totalRecords.sort((a, b) => {
+            if (a.score !== b.score) return b.score - a.score;
+            return b.level - a.level;
+        });
+        LeaderboardPanel.saveMemoryRecords(STORAGE_KEY, 0, totalRecords.slice(0, 50));
+
+        // 周榜
+        const weekRecords = LeaderboardPanel.loadMemoryRecords(STORAGE_KEY, 1);
+        const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const filteredWeek = weekRecords.filter(r => r.date > weekAgo);
+        filteredWeek.push(record);
+        filteredWeek.sort((a, b) => {
+            if (a.score !== b.score) return b.score - a.score;
+            return b.level - a.level;
+        });
+        LeaderboardPanel.saveMemoryRecords(STORAGE_KEY, 1, filteredWeek.slice(0, 50));
+
+        // 月榜
+        const monthRecords = LeaderboardPanel.loadMemoryRecords(STORAGE_KEY, 2);
+        const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        const filteredMonth = monthRecords.filter(r => r.date > monthAgo);
+        filteredMonth.push(record);
+        filteredMonth.sort((a, b) => {
+            if (a.score !== b.score) return b.score - a.score;
+            return b.level - a.level;
+        });
+        LeaderboardPanel.saveMemoryRecords(STORAGE_KEY, 2, filteredMonth.slice(0, 50));
+    }
+
+    /**
+     * 通用添加记录方法（向后兼容）
+     * @deprecated 请使用 addSchulteRecord 或 addMemoryRecord
+     */
+    public static addRecord(timeMs: number, errors: number, name: string = "匿名玩家"): void {
+        LeaderboardPanel.addSchulteRecord(timeMs, errors, name);
+    }
+
+    private static loadRecords(storageKey: string, tab: number): SchulteRecord[] {
         try {
             const data = Laya.LocalStorage.getItem(`${storageKey}_${tab}`);
             if (data) {
@@ -813,7 +1052,19 @@ export class LeaderboardPanel extends Laya.Scene {
         return [];
     }
 
-    private static saveRecords(storageKey: string, tab: number, records: any[]): void {
+    private static loadMemoryRecords(storageKey: string, tab: number): MemoryRecord[] {
+        try {
+            const data = Laya.LocalStorage.getItem(`${storageKey}_${tab}`);
+            if (data) {
+                return JSON.parse(data);
+            }
+        } catch (e) {
+            console.warn("读取排行榜数据失败", e);
+        }
+        return [];
+    }
+
+    private static saveRecords(storageKey: string, tab: number, records: SchulteRecord[]): void {
         try {
             Laya.LocalStorage.setItem(`${storageKey}_${tab}`, JSON.stringify(records));
         } catch (e) {
@@ -821,7 +1072,15 @@ export class LeaderboardPanel extends Laya.Scene {
         }
     }
 
-    private calculateScore(timeMs: number, errors: number): number {
+    private static saveMemoryRecords(storageKey: string, tab: number, records: MemoryRecord[]): void {
+        try {
+            Laya.LocalStorage.setItem(`${storageKey}_${tab}`, JSON.stringify(records));
+        } catch (e) {
+            console.warn("保存排行榜数据失败", e);
+        }
+    }
+
+    private calculateSchulteScore(timeMs: number, errors: number): number {
         // 基础分100，时间越短分数越高，错误扣分
         const baseScore = 100;
         const timeDeduction = Math.floor(timeMs / 1000); // 每秒扣1分
