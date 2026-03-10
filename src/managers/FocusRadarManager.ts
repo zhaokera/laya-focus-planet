@@ -224,7 +224,41 @@ export class FocusRadarManager {
             this.state.weeklyGameCount++;
         }
 
+        // 更新连续打卡
+        this.updateStreak();
+
         this.saveRecords();
+    }
+
+    /**
+     * 更新连续打卡数据
+     */
+    private static updateStreak(): void {
+        const streakKey = "focus_planet_streak";
+        const lastPlayKey = "focus_planet_last_play_date";
+
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+            const lastPlayDate = Laya.LocalStorage.getItem(lastPlayKey) || "";
+            let streak = parseInt(Laya.LocalStorage.getItem(streakKey) || "0");
+
+            if (lastPlayDate === today) {
+                // 今天已经打过卡，不重复增加
+                return;
+            } else if (lastPlayDate === yesterday) {
+                // 昨天打过卡，连续+1
+                streak++;
+            } else {
+                // 连续中断，重新开始
+                streak = 1;
+            }
+
+            Laya.LocalStorage.setItem(streakKey, String(streak));
+            Laya.LocalStorage.setItem(lastPlayKey, today);
+        } catch (e) {
+            console.warn("[FocusRadar] 更新连续打卡失败", e);
+        }
     }
 
     /**
@@ -386,5 +420,45 @@ export class FocusRadarManager {
             weeklyGames: this.state?.weeklyGameCount || 0,
             lastPlayed
         };
+    }
+
+    /**
+     * 获取连续打卡天数
+     */
+    public static getStreakDays(): number {
+        const streakKey = "focus_planet_streak";
+        const lastPlayKey = "focus_planet_last_play_date";
+
+        try {
+            const streak = parseInt(Laya.LocalStorage.getItem(streakKey) || "0");
+            const lastPlayDate = Laya.LocalStorage.getItem(lastPlayKey) || "";
+
+            const today = new Date().toISOString().split('T')[0];
+            const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+            if (lastPlayDate === today || lastPlayDate === yesterday) {
+                return streak;
+            } else if (lastPlayDate === "") {
+                return 0;
+            } else {
+                return 0;
+            }
+        } catch (e) {
+            return 0;
+        }
+    }
+
+    /**
+     * 检查今天是否已训练
+     */
+    public static isTodayPlayed(): boolean {
+        const lastPlayKey = "focus_planet_last_play_date";
+        try {
+            const lastPlayDate = Laya.LocalStorage.getItem(lastPlayKey) || "";
+            const today = new Date().toISOString().split('T')[0];
+            return lastPlayDate === today;
+        } catch (e) {
+            return false;
+        }
     }
 }

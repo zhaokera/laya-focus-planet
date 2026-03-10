@@ -4,8 +4,10 @@ import { LeaderboardPanel } from "./LeaderboardPanel";
 import { ChallengeSelectPanel } from "./ChallengeSelectPanel";
 import { GameSelectPanel } from "./GameSelectPanel";
 import { SettingsPanel } from "./SettingsPanel";
-import { SoundManager } from "./SoundManager";
+import { SoundManager } from "../managers/SoundManager";
 import { GuideOverlay, BeginnerGuide } from "../components/GuideOverlay";
+import { FocusRadarManager } from "../managers/FocusRadarManager";
+import { AchievementManager } from "../managers/AchievementManager";
 
 @regClass("84f89060-d701-4411-b5dc-ae6e4a05aed0", "../src/Main.ts")
 export class Main extends Laya.Scene {
@@ -27,7 +29,7 @@ export class Main extends Laya.Scene {
     private startBtnBaseX: number = 0;
     private startBtnBaseY: number = 0;
 
-    private readonly BUTTON_START_Y = 450;
+    private readonly BUTTON_START_Y = 420;
 
     private readonly assetMap: Record<string, string[]> = {
         home_bg: this.makeCandidates("home_bg.png"),
@@ -113,6 +115,7 @@ export class Main extends Laya.Scene {
 
     private drawMainUI(): void {
         this.drawLogoAndRibbon();
+        this.drawPlayerStatusCard();
         this.drawButtons();
     }
 
@@ -137,6 +140,219 @@ export class Main extends Laya.Scene {
         this.createAssetImage(this.layerUI, "title", titleX, titleY, titleW, titleH);
     }
 
+    private drawPlayerStatusCard(): void {
+        // 获取玩家数据
+        const levelInfo = FocusRadarManager.getFocusLevelInfo();
+        const summary = FocusRadarManager.getSummary();
+        const stats = AchievementManager.getStats();
+        const dailyTasks = AchievementManager.getDailyTasks();
+
+        // 计算今日完成情况
+        const completedTasks = dailyTasks.filter(t => t.completed).length;
+        const totalTasks = dailyTasks.length;
+
+        // 计算连续打卡天数
+        const streakDays = this.getStreakDays();
+
+        // 卡片位置
+        const cardY = 260;
+        const cardW = this.designW * 0.88;
+        const cardH = 75;
+        const cardX = (this.designW - cardW) * 0.5;
+
+        // 卡片容器
+        const card = new Laya.Sprite();
+        card.pos(cardX, cardY);
+        card.size(cardW, cardH);
+
+        // 卡片背景 - 圆角矩形带渐变效果
+        card.graphics.drawPath(0, 0, [
+            ["moveTo", 16, 0],
+            ["lineTo", cardW - 16, 0],
+            ["arcTo", cardW, 0, cardW, 16, 16],
+            ["lineTo", cardW, cardH - 16],
+            ["arcTo", cardW, cardH, cardW - 16, cardH, 16],
+            ["lineTo", 16, cardH],
+            ["arcTo", 0, cardH, 0, cardH - 16, 16],
+            ["lineTo", 0, 16],
+            ["arcTo", 0, 0, 16, 0, 16],
+            ["closePath"]
+        ], { fillStyle: "rgba(40,35,60,0.85)" });
+
+        // 边框发光效果
+        card.graphics.drawPath(0, 0, [
+            ["moveTo", 16, 0],
+            ["lineTo", cardW - 16, 0],
+            ["arcTo", cardW, 0, cardW, 16, 16],
+            ["lineTo", cardW, cardH - 16],
+            ["arcTo", cardW, cardH, cardW - 16, cardH, 16],
+            ["lineTo", 16, cardH],
+            ["arcTo", 0, cardH, 0, cardH - 16, 16],
+            ["lineTo", 0, 16],
+            ["arcTo", 0, 0, 16, 0, 16],
+            ["closePath"]
+        ], { strokeStyle: "rgba(99,102,241,0.4)", lineWidth: 2 });
+
+        this.layerUI.addChild(card);
+
+        // === 左侧：等级徽章 ===
+        const badgeX = 20;
+        const badgeY = 20;
+        const badgeSize = 60;
+
+        // 徽章背景圆
+        card.graphics.drawCircle(badgeX + badgeSize/2, badgeY + badgeSize/2, badgeSize/2, levelInfo.color);
+        card.graphics.drawCircle(badgeX + badgeSize/2, badgeY + badgeSize/2, badgeSize/2, null, "rgba(255,255,255,0.3)", 2);
+
+        // 等级文字
+        const levelText = new Laya.Text();
+        levelText.text = levelInfo.level;
+        levelText.font = "Microsoft YaHei";
+        levelText.fontSize = 24;
+        levelText.bold = true;
+        levelText.color = "#FFFFFF";
+        levelText.width = badgeSize;
+        levelText.height = badgeSize;
+        levelText.align = "center";
+        levelText.valign = "middle";
+        levelText.pos(badgeX, badgeY);
+        card.addChild(levelText);
+
+        // 称号
+        const titleText = new Laya.Text();
+        titleText.text = levelInfo.title;
+        titleText.font = "Microsoft YaHei";
+        titleText.fontSize = 14;
+        titleText.bold = true;
+        titleText.color = levelInfo.color;
+        titleText.width = badgeSize;
+        titleText.align = "center";
+        titleText.pos(badgeX, badgeY + badgeSize + 2);
+        card.addChild(titleText);
+
+        // === 中间：统计数据 ===
+        const statsX = 100;
+        const statsY = 15;
+
+        // 统计项
+        const statItems = [
+            { icon: "📊", label: "累计训练", value: `${summary.totalGames}局`, x: 0 },
+            { icon: "🔥", label: "连续打卡", value: `${streakDays}天`, x: 130 },
+            { icon: "✅", label: "今日任务", value: `${completedTasks}/${totalTasks}`, x: 260 }
+        ];
+
+        statItems.forEach(item => {
+            const itemY = statsY;
+
+            // 标签
+            const label = new Laya.Text();
+            label.text = `${item.icon} ${item.label}`;
+            label.font = "Microsoft YaHei";
+            label.fontSize = 12;
+            label.color = "rgba(255,255,255,0.6)";
+            label.pos(statsX + item.x, itemY);
+            card.addChild(label);
+
+            // 数值
+            const value = new Laya.Text();
+            value.text = item.value;
+            value.font = "Microsoft YaHei";
+            value.fontSize = 20;
+            value.bold = true;
+            value.color = "#FFFFFF";
+            value.pos(statsX + item.x, itemY + 20);
+            card.addChild(value);
+        });
+
+        // === 右侧：今日状态提示 ===
+        const tipX = cardW - 90;
+        const tipY = 25;
+
+        // 判断今日是否已训练
+        const todayPlayed = summary.weeklyGameCount > 0 && this.isTodayPlayed();
+        let tipIcon: string, tipText: string, tipColor: string;
+
+        if (todayPlayed) {
+            tipIcon = "✨";
+            tipText = "今日已训练";
+            tipColor = "#4CAF50";
+        } else {
+            tipIcon = "💪";
+            tipText = "开始训练";
+            tipColor = "#FFD700";
+        }
+
+        const tipIconText = new Laya.Text();
+        tipIconText.text = tipIcon;
+        tipIconText.fontSize = 28;
+        tipIconText.pos(tipX, tipY);
+        card.addChild(tipIconText);
+
+        const tipLabel = new Laya.Text();
+        tipLabel.text = tipText;
+        tipLabel.font = "Microsoft YaHei";
+        tipLabel.fontSize = 14;
+        tipLabel.bold = true;
+        tipLabel.color = tipColor;
+        tipLabel.width = 80;
+        tipLabel.align = "center";
+        tipLabel.pos(tipX - 15, tipY + 35);
+        card.addChild(tipLabel);
+
+        // 点击卡片跳转到专注力分析
+        card.mouseEnabled = true;
+        card.on(Event.CLICK, this, () => {
+            SoundManager.playClick();
+            this.showFocusRadar();
+        });
+    }
+
+    /**
+     * 获取连续打卡天数
+     */
+    private getStreakDays(): number {
+        const streakKey = "focus_planet_streak";
+        const lastPlayKey = "focus_planet_last_play_date";
+
+        try {
+            const streak = parseInt(Laya.LocalStorage.getItem(streakKey) || "0");
+            const lastPlayDate = Laya.LocalStorage.getItem(lastPlayKey) || "";
+
+            const today = new Date().toISOString().split('T')[0];
+            const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+            if (lastPlayDate === today) {
+                // 今天已打过卡
+                return streak;
+            } else if (lastPlayDate === yesterday) {
+                // 昨天打过卡，今天还没
+                return streak; // 返回当前连续天数（今天打卡后会增加）
+            } else if (lastPlayDate === "") {
+                // 从未打过卡
+                return 0;
+            } else {
+                // 连续中断
+                return 0;
+            }
+        } catch (e) {
+            return 0;
+        }
+    }
+
+    /**
+     * 检查今天是否已训练
+     */
+    private isTodayPlayed(): boolean {
+        const lastPlayKey = "focus_planet_last_play_date";
+        try {
+            const lastPlayDate = Laya.LocalStorage.getItem(lastPlayKey) || "";
+            const today = new Date().toISOString().split('T')[0];
+            return lastPlayDate === today;
+        } catch (e) {
+            return false;
+        }
+    }
+
     private drawButtons(): void {
         const defs = [
             { label: "开始游戏", btn: "btn_start", icon: "icon_play", action: "start" },
@@ -147,13 +363,13 @@ export class Main extends Laya.Scene {
         ];
 
         const bw = this.designW * 0.68;
-        const bh = bw * (256 / 1024);
-        const gap = 6; // 减小间距以容纳5个按钮
+        const bh = bw * (200 / 1024);  // 减小按钮高度
+        const gap = 4; // 减小按钮间距
         const x = (this.designW - bw) * 0.5;
         const y0 = this.BUTTON_START_Y;
-        const iconSize = 56;
-        const iconX = 48;
-        const fontSize = Math.max(26, Math.floor(bh * 0.28)); // 稍微减小字体
+        const iconSize = 48;  // 减小图标尺寸
+        const iconX = 40;
+        const fontSize = Math.max(22, Math.floor(bh * 0.28)); // 稍微减小字体
 
         defs.forEach((d, i) => {
             const y = y0 + i * (bh + gap);
