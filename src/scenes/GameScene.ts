@@ -2,6 +2,9 @@ const { regClass, Event } = Laya;
 
 import { GridCell } from "./GridCell";
 import { SoundManager } from "./SoundManager";
+import { VibrationManager } from "../managers/VibrationManager";
+import { AchievementManager } from "../managers/AchievementManager";
+import { FocusRadarManager } from "../managers/FocusRadarManager";
 import { LeaderboardPanel } from "./LeaderboardPanel";
 
 @regClass("game_scene", "../src/GameScene.ts")
@@ -59,6 +62,11 @@ export class GameScene extends Laya.Scene {
     private _errors: number = 0;
     private _isPlaying: boolean = false;
     private _startTime: number = 0;
+    private _combo: number = 0; // 连击计数
+    private _comboText: Laya.Text = null; // 连击提示文字
+    private _isPaused: boolean = false; // 暂停状态
+    private _pausedTime: number = 0; // 暂停时已用时间
+    private pauseOverlay: Laya.Sprite = null; // 暂停弹窗
 
     onAwake(): void {
         Laya.stage.alignH = "center";
@@ -238,21 +246,26 @@ export class GameScene extends Laya.Scene {
         }
         this.hudPanel = this.createImage(this.uiLayer, this.ASSET.hudPanel, (this.BASE_W - 340) * 0.5, 75, 340, 90, "16,16,16,16");
         this.hudPanel.alpha = 1;
-        this.targetText = this.createHudItem("目标", "1", "#FFD700", 0);
-        this.timerText = this.createHudItem("用时", "00:00", "#4FC3F7", 1);
-        this.errorText = this.createHudItem("错误", "0", "#FF6B6B", 2);
+
+        // 调整布局：目标、用时、错误、暂停按钮
+        const itemW = 80;
+        const startX = 10;
+
+        this.targetText = this.createHudItem("目标", "1", "#FFD700", 0, startX, itemW);
+        this.timerText = this.createHudItem("用时", "00:00", "#4FC3F7", 1, startX + itemW, itemW);
+        this.errorText = this.createHudItem("错误", "0", "#FF6B6B", 2, startX + itemW * 2, itemW);
+
+        // 暂停按钮
+        this.createPauseButton();
     }
 
-    private createHudItem(label: string, value: string, color: string, index: number): Laya.Text {
-        const itemW = 340 / 3;
-        const originX = index * itemW;
-
+    private createHudItem(label: string, value: string, color: string, index: number, originX: number, width: number): Laya.Text {
         const labelText = new Laya.Text();
         labelText.text = label;
         labelText.font = "Microsoft YaHei";
         labelText.fontSize = 12;
         labelText.color = "rgba(255,255,255,0.6)";
-        labelText.width = itemW;
+        labelText.width = width;
         labelText.align = "center";
         labelText.pos(originX, 17);
         this.hudPanel.addChild(labelText);
@@ -263,12 +276,35 @@ export class GameScene extends Laya.Scene {
         valueText.fontSize = 26;
         valueText.bold = true;
         valueText.color = color;
-        valueText.width = itemW;
+        valueText.width = width;
         valueText.align = "center";
         valueText.pos(originX, 37);
         this.hudPanel.addChild(valueText);
 
         return valueText;
+    }
+
+    private createPauseButton(): void {
+        const btnSize = 36;
+        const btnX = 340 - btnSize - 12;
+        const btnY = (90 - btnSize) * 0.5;
+
+        const pauseBtn = new Laya.Sprite();
+        pauseBtn.size(btnSize, btnSize);
+        pauseBtn.pos(btnX, btnY);
+        pauseBtn.mouseEnabled = true;
+
+        // 按钮背景
+        pauseBtn.graphics.drawRoundRect(0, 0, btnSize, btnSize, 8, "rgba(255,255,255,0.15)", "rgba(255,255,255,0.3)", 1);
+
+        // 暂停图标 (两条竖线)
+        const icon = new Laya.Sprite();
+        icon.graphics.drawRect(10, 10, 5, 16, "#FFFFFF");
+        icon.graphics.drawRect(20, 10, 5, 16, "#FFFFFF");
+        pauseBtn.addChild(icon);
+
+        pauseBtn.on(Event.CLICK, this, this.showPausePopup);
+        this.hudPanel.addChild(pauseBtn);
     }
 
     private createDifficultyButtons(): void {
@@ -555,6 +591,134 @@ export class GameScene extends Laya.Scene {
         this.fxLayer.addChild(this.popupOverlay);
     }
 
+    /**
+     * 显示暂停弹窗
+     */
+    private showPausePopup(): void {
+        if (!this._isPlaying) return;
+
+        // 暂停游戏
+        this._isPaused = true;
+        this._pausedTime = Laya.timer.currTimer - this._startTime;
+
+        // 创建暂停弹窗
+        if (!this.pauseOverlay) {
+            this.pauseOverlay = new Laya.Sprite();
+            this.pauseOverlay.size(this.BASE_W, this.BASE_H);
+            this.pauseOverlay.graphics.drawRect(0, 0, this.BASE_W, this.BASE_H, "rgba(0,0,0,0.7)");
+            this.pauseOverlay.mouseEnabled = true;
+            this.pauseOverlay.on(Event.CLICK, this, () => { /* consume */ });
+            this.fxLayer.addChild(this.pauseOverlay);
+
+            // 弹窗面板
+            const pausePanel = new Laya.Sprite();
+            pausePanel.name = "pausePanel";
+            pausePanel.size(260, 220);
+            pausePanel.pos((this.BASE_W - 260) * 0.5, (this.BASE_H - 220) * 0.5);
+            pausePanel.graphics.drawRoundRect(0, 0, 260, 220, 20, "rgba(40,40,60,0.95)", "rgba(255,255,255,0.2)", 1);
+            this.pauseOverlay.addChild(pausePanel);
+
+            // 标题
+            const title = new Laya.Text();
+            title.text = "游戏暂停";
+            title.font = "Microsoft YaHei";
+            title.fontSize = 24;
+            title.bold = true;
+            title.color = "#FFD700";
+            title.width = 260;
+            title.align = "center";
+            title.pos(0, 24);
+            pausePanel.addChild(title);
+
+            // 继续游戏按钮
+            const resumeBtn = new Laya.Sprite();
+            resumeBtn.size(180, 44);
+            resumeBtn.pos((260 - 180) * 0.5, 70);
+            resumeBtn.mouseEnabled = true;
+            resumeBtn.graphics.drawRoundRect(0, 0, 180, 44, 12, "#4CAF50");
+            resumeBtn.on(Event.CLICK, this, this.onResumeGame);
+            pausePanel.addChild(resumeBtn);
+
+            const resumeText = new Laya.Text();
+            resumeText.text = "继续游戏";
+            resumeText.font = "Microsoft YaHei";
+            resumeText.fontSize = 16;
+            resumeText.bold = true;
+            resumeText.color = "#FFFFFF";
+            resumeText.width = 180;
+            resumeText.height = 44;
+            resumeText.align = "center";
+            resumeText.valign = "middle";
+            resumeBtn.addChild(resumeText);
+
+            // 重新开始按钮
+            const restartBtn = new Laya.Sprite();
+            restartBtn.size(180, 44);
+            restartBtn.pos((260 - 180) * 0.5, 120);
+            restartBtn.mouseEnabled = true;
+            restartBtn.graphics.drawRoundRect(0, 0, 180, 44, 12, "rgba(255,255,255,0.15)", "rgba(255,255,255,0.3)", 1);
+            restartBtn.on(Event.CLICK, this, this.onRestartGame);
+            pausePanel.addChild(restartBtn);
+
+            const restartText = new Laya.Text();
+            restartText.text = "重新开始";
+            restartText.font = "Microsoft YaHei";
+            restartText.fontSize = 16;
+            restartText.bold = true;
+            restartText.color = "#FFFFFF";
+            restartText.width = 180;
+            restartText.height = 44;
+            restartText.align = "center";
+            restartText.valign = "middle";
+            restartBtn.addChild(restartText);
+
+            // 返回首页按钮
+            const homeBtn = new Laya.Sprite();
+            homeBtn.size(180, 44);
+            homeBtn.pos((260 - 180) * 0.5, 170);
+            homeBtn.mouseEnabled = true;
+            homeBtn.graphics.drawRoundRect(0, 0, 180, 44, 12, "rgba(255,107,107,0.3)", "rgba(255,107,107,0.5)", 1);
+            homeBtn.on(Event.CLICK, this, this.goBackToMain);
+            pausePanel.addChild(homeBtn);
+
+            const homeText = new Laya.Text();
+            homeText.text = "返回首页";
+            homeText.font = "Microsoft YaHei";
+            homeText.fontSize = 16;
+            homeText.bold = true;
+            homeText.color = "#FF6B6B";
+            homeText.width = 180;
+            homeText.height = 44;
+            homeText.align = "center";
+            homeText.valign = "middle";
+            homeBtn.addChild(homeText);
+        }
+
+        this.pauseOverlay.visible = true;
+        this.pauseOverlay.alpha = 1;
+    }
+
+    private onResumeGame(): void {
+        if (!this._isPaused) return;
+
+        this._isPaused = false;
+        // 恢复计时：从暂停时刻继续
+        this._startTime = Laya.timer.currTimer - this._pausedTime;
+
+        if (this.pauseOverlay) {
+            this.pauseOverlay.visible = false;
+        }
+    }
+
+    private onRestartGame(): void {
+        this._isPaused = false;
+        if (this.pauseOverlay) {
+            this.pauseOverlay.visible = false;
+        }
+        this.resetRunState(true);
+        this.createGamePanelAndGrid();
+    }
+
     private createImage(parent: Laya.Sprite, skin: string, x: number, y: number, w: number, h: number, sizeGrid?: string): Laya.Sprite {
         const img = new Laya.Sprite();
         img.pos(x, y);
@@ -623,12 +787,19 @@ export class GameScene extends Laya.Scene {
 
         cell.markCompleted();
         SoundManager.playCorrect(); // 播放正确音
+        VibrationManager.light(); // 轻微震动
+
+        // 连击计数
+        this._combo++;
+        this.showComboHint();
+
         this._currentNumber++;
         this.updateTargetDisplay();
 
         if (this._currentNumber > this._totalNumbers) {
             this._isPlaying = false;
             SoundManager.playComplete(); // 播放完成音
+            VibrationManager.heavy(); // 强烈震动
             this.showPopup();
             return;
         }
@@ -638,9 +809,11 @@ export class GameScene extends Laya.Scene {
 
     private onWrong(cell: GridCell): void {
         this._errors++;
+        this._combo = 0; // 重置连击
         this.updateErrorDisplay();
         cell.showError();
         SoundManager.playWrong(); // 播放错误音
+        VibrationManager.medium(); // 中等震动
 
         const ox = this.root.x;
         this.root.x = ox - 4;
@@ -670,7 +843,7 @@ export class GameScene extends Laya.Scene {
     }
 
     private updateTimer(): void {
-        if (!this._isPlaying) return;
+        if (!this._isPlaying || this._isPaused) return;
         const elapsed = Math.max(0, Laya.timer.currTimer - this._startTime);
         this.timerText.text = this.formatTime(elapsed);
     }
@@ -680,6 +853,60 @@ export class GameScene extends Laya.Scene {
         const mm = Math.floor(totalSec / 60).toString().padStart(2, "0");
         const ss = (totalSec % 60).toString().padStart(2, "0");
         return `${mm}:${ss}`;
+    }
+
+    /**
+     * 显示连击提示
+     */
+    private showComboHint(): void {
+        // 根据连击数决定显示文字
+        let text = "";
+        let color = "#FFFFFF";
+
+        if (this._combo >= 15) {
+            text = "Incredible!";
+            color = "#FF6B6B";
+        } else if (this._combo >= 10) {
+            text = "Amazing!";
+            color = "#FFD700";
+        } else if (this._combo >= 5) {
+            text = "Perfect!";
+            color = "#4FC3F7";
+        } else {
+            return; // 不足5次不显示
+        }
+
+        // 创建或更新连击文字
+        if (!this._comboText) {
+            this._comboText = new Laya.Text();
+            this._comboText.font = "Microsoft YaHei";
+            this._comboText.fontSize = 32;
+            this._comboText.bold = true;
+            this._comboText.stroke = 3;
+            this._comboText.strokeColor = "rgba(0,0,0,0.5)";
+            this._comboText.width = this.BASE_W;
+            this._comboText.align = "center";
+            this._comboText.pos(0, 580);
+            this.fxLayer.addChild(this._comboText);
+        }
+
+        this._comboText.text = text;
+        this._comboText.color = color;
+        this._comboText.alpha = 1;
+        this._comboText.scale(1.2, 1.2);
+
+        // 动画效果
+        Laya.Tween.to(this._comboText, { scaleX: 1, scaleY: 1 }, 150, Laya.Ease.backOut);
+
+        // 延迟淡出
+        Laya.timer.clear(this, this.hideComboText);
+        Laya.timer.once(800, this, this.hideComboText);
+    }
+
+    private hideComboText(): void {
+        if (this._comboText) {
+            Laya.Tween.to(this._comboText, { alpha: 0 }, 300);
+        }
     }
 
     private showPopup(): void {
@@ -692,6 +919,27 @@ export class GameScene extends Laya.Scene {
 
         // 保存到排行榜
         LeaderboardPanel.addSchulteRecord(elapsed, this._errors, "玩家");
+
+        // 记录游戏结果并检查成就
+        const newAchievements = AchievementManager.recordSchulteGame(
+            this._currentSize,
+            elapsed,
+            this._errors,
+            this._combo
+        );
+
+        // 记录到专注力雷达图
+        FocusRadarManager.recordSchulteGame(
+            this._currentSize,
+            elapsed,
+            this._errors,
+            this._combo
+        );
+
+        // 如果有新成就解锁，可以显示提示
+        if (newAchievements.length > 0) {
+            console.log("[GameScene] 新成就解锁:", newAchievements);
+        }
 
         this.popupOverlay.visible = true;
         this.popupOverlay.alpha = 1;
@@ -708,6 +956,10 @@ export class GameScene extends Laya.Scene {
     private resetRunState(startImmediately: boolean): void {
         this._currentNumber = 1;
         this._errors = 0;
+        this._combo = 0; // 重置连击
+        if (this._comboText) {
+            this._comboText.alpha = 0;
+        }
         this.updateTargetDisplay();
         this.updateErrorDisplay();
         this.timerText.text = "00:00";

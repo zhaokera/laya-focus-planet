@@ -8,6 +8,7 @@ const { Event } = Laya;
 interface GameSettings {
     soundEnabled: boolean;
     vibrationEnabled: boolean;
+    soundVolume: number; // 音量 0-1
     playerName: string;
 }
 
@@ -16,6 +17,7 @@ export class SettingsManager {
     private static settings: GameSettings = {
         soundEnabled: true,
         vibrationEnabled: true,
+        soundVolume: 0.5,
         playerName: "匿名玩家"
     };
 
@@ -67,6 +69,15 @@ export class SettingsManager {
         this.save();
     }
 
+    public static getSoundVolume(): number {
+        return this.settings.soundVolume !== undefined ? this.settings.soundVolume : 0.5;
+    }
+
+    public static setSoundVolume(volume: number): void {
+        this.settings.soundVolume = Math.max(0, Math.min(1, volume));
+        this.save();
+    }
+
     public static clearAllData(): void {
         // 清除排行榜数据
         for (let i = 0; i < 3; i++) {
@@ -76,6 +87,7 @@ export class SettingsManager {
         this.settings = {
             soundEnabled: true,
             vibrationEnabled: true,
+            soundVolume: 0.5,
             playerName: "匿名玩家"
         };
         this.save();
@@ -173,9 +185,9 @@ export class SettingsPanel extends Laya.Scene {
 
     private initPanel(): void {
         const panelW = 340;
-        const panelH = 420;
+        const panelH = 480; // 增加面板高度
         const panelX = (this.BASE_W - panelW) * 0.5;
-        const panelY = 120;
+        const panelY = 100;
 
         // 半透明遮罩背景
         this.bgLayer = new Laya.Sprite();
@@ -277,14 +289,20 @@ export class SettingsPanel extends Laya.Scene {
             SettingsManager.setSoundEnabled(enabled);
         });
 
+        // 音量滑块
+        this.createSliderItem("音量", this.settings.soundVolume || 0.5, startY + itemH, (volume) => {
+            this.settings.soundVolume = volume;
+            SettingsManager.setSoundVolume(volume);
+        });
+
         // 震动反馈
-        this.createToggleItem("震动反馈", this.settings.vibrationEnabled, startY + itemH, (enabled) => {
+        this.createToggleItem("震动反馈", this.settings.vibrationEnabled, startY + itemH * 2, (enabled) => {
             this.settings.vibrationEnabled = enabled;
             SettingsManager.setVibrationEnabled(enabled);
         });
 
         // 玩家名称
-        this.createInputItem("玩家名称", this.settings.playerName, startY + itemH * 2, (name) => {
+        this.createInputItem("玩家名称", this.settings.playerName, startY + itemH * 3, (name) => {
             this.settings.playerName = name;
             SettingsManager.setPlayerName(name);
         });
@@ -388,12 +406,109 @@ export class SettingsPanel extends Laya.Scene {
         });
     }
 
+    private createSliderItem(label: string, value: number, y: number, onChange: (volume: number) => void): void {
+        const panelW = 340;
+        const itemW = 300;
+        const startX = (panelW - itemW) * 0.5;
+
+        // 标签文字
+        const labelText = new Laya.Text();
+        labelText.text = label;
+        labelText.font = "Microsoft YaHei";
+        labelText.fontSize = 16;
+        labelText.color = "#FFFFFF";
+        labelText.pos(startX, y + 8);
+        this.contentLayer.addChild(labelText);
+
+        // 滑块轨道
+        const sliderW = 180;
+        const sliderH = 8;
+        const sliderX = startX + 60;
+        const sliderY = y + 30;
+
+        const track = new Laya.Sprite();
+        track.size(sliderW, sliderH);
+        track.pos(sliderX, sliderY);
+        track.graphics.drawRoundRect(0, 0, sliderW, sliderH, 4, "rgba(255,255,255,0.2)");
+        this.contentLayer.addChild(track);
+
+        // 滑块填充
+        const fill = new Laya.Sprite();
+        fill.name = "sliderFill";
+        const fillW = Math.floor(sliderW * value);
+        fill.graphics.drawRoundRect(0, 0, fillW, sliderH, 4, "#4FC3F7");
+        fill.pos(sliderX, sliderY);
+        this.contentLayer.addChild(fill);
+
+        // 滑块手柄
+        const knob = new Laya.Sprite();
+        knob.size(20, 20);
+        knob.name = "sliderKnob";
+        const knobX = sliderX + fillW - 10;
+        knob.pos(knobX, sliderY - 6);
+        knob.graphics.drawCircle(10, 10, 10, "#FFFFFF", "rgba(79,195,247,0.5)", 2);
+        knob.mouseEnabled = true;
+        this.contentLayer.addChild(knob);
+
+        // 百分比文字
+        const percentText = new Laya.Text();
+        percentText.name = "volumePercent";
+        percentText.text = `${Math.floor(value * 100)}%`;
+        percentText.font = "Microsoft YaHei";
+        percentText.fontSize = 14;
+        percentText.color = "#4FC3F7";
+        percentText.width = 50;
+        percentText.align = "center";
+        percentText.pos(startX + itemW - 50, y + 18);
+        this.contentLayer.addChild(percentText);
+
+        // 拖动逻辑
+        let isDragging = false;
+        const updateSlider = (localX: number) => {
+            const clampedX = Math.max(0, Math.min(sliderW, localX));
+            const newVolume = clampedX / sliderW;
+
+            // 更新填充
+            fill.graphics.clear();
+            fill.graphics.drawRoundRect(0, 0, clampedX, sliderH, 4, "#4FC3F7");
+
+            // 更新手柄位置
+            knob.x = sliderX + clampedX - 10;
+
+            // 更新文字
+            percentText.text = `${Math.floor(newVolume * 100)}%`;
+
+            onChange(newVolume);
+        };
+
+        knob.on(Event.MOUSE_DOWN, this, () => {
+            isDragging = true;
+        });
+
+        this.on(Event.MOUSE_MOVE, this, (e: Laya.Event) => {
+            if (isDragging) {
+                const localX = e.stageX / this.root.scaleX - sliderX - this.root.x / this.root.scaleX;
+                updateSlider(localX);
+            }
+        });
+
+        this.on(Event.MOUSE_UP, this, () => {
+            isDragging = false;
+        });
+
+        // 点击轨道也可以调整
+        track.on(Event.CLICK, this, (e: Laya.Event) => {
+            const localX = e.localX;
+            updateSlider(localX);
+        });
+    }
+
     private createClearButton(): void {
         const panelW = 340;
         const btnW = 200;
         const btnH = 44;
         const btnX = (panelW - btnW) * 0.5;
-        const btnY = 280;
+        const btnY = 340; // 调整位置
 
         const btn = new Laya.Sprite();
         btn.size(btnW, btnH);
@@ -544,7 +659,7 @@ export class SettingsPanel extends Laya.Scene {
         const btnW = 120;
         const btnH = 40;
         const btnX = (panelW - btnW) * 0.5;
-        const btnY = 350;
+        const btnY = 410; // 调整位置
 
         const btn = new Laya.Sprite();
         btn.size(btnW, btnH);

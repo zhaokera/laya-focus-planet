@@ -6,6 +6,8 @@ const { regClass, Event } = Laya;
 
 import { MemoryCell } from "./MemoryCell";
 import { SoundManager } from "./SoundManager";
+import { VibrationManager } from "../managers/VibrationManager";
+import { FocusRadarManager } from "../managers/FocusRadarManager";
 import { LeaderboardPanel } from "./LeaderboardPanel";
 
 // 关卡配置接口
@@ -79,6 +81,8 @@ export class MemoryScene extends Laya.Scene {
     private _lives: number = 5;
     private _score: number = 0;
     private _startTime: number = 0;
+    private _combo: number = 0;              // 连击计数
+    private _comboText: Laya.Text = null;    // 连击提示文字
 
     onAwake(): void {
         Laya.stage.alignH = "center";
@@ -555,6 +559,11 @@ export class MemoryScene extends Laya.Scene {
     private onCorrectClick(cell: MemoryCell, number: number): void {
         cell.markCorrect();
         SoundManager.playCorrect();
+        VibrationManager.light(); // 轻微震动
+
+        // 连击计数
+        this._combo++;
+        this.showComboHint();
 
         this._playerInput.push(cell.getPosition());
         this._inputIndex++;
@@ -574,7 +583,9 @@ export class MemoryScene extends Laya.Scene {
     private async onWrongClick(cell: MemoryCell): Promise<void> {
         await cell.showError();
         SoundManager.playWrong();
+        VibrationManager.medium(); // 中等震动
 
+        this._combo = 0; // 重置连击
         this._lives--;
         this.updateHudDisplay();
 
@@ -644,6 +655,9 @@ export class MemoryScene extends Laya.Scene {
         // 保存到排行榜
         LeaderboardPanel.addMemoryRecord(this._score, this._currentLevel, "玩家");
 
+        // 记录到专注力雷达图
+        FocusRadarManager.recordMemoryGame(this._currentLevel, this._combo);
+
         // 显示结果弹窗
         this.showResultPopup();
     }
@@ -695,6 +709,60 @@ export class MemoryScene extends Laya.Scene {
         }
         if (this._score > bestScore) {
             Laya.LocalStorage.setItem(scoreKey, String(this._score));
+        }
+    }
+
+    /**
+     * 显示连击提示
+     */
+    private showComboHint(): void {
+        // 根据连击数决定显示文字
+        let text = "";
+        let color = "#FFFFFF";
+
+        if (this._combo >= 15) {
+            text = "Incredible!";
+            color = "#FF6B6B";
+        } else if (this._combo >= 10) {
+            text = "Amazing!";
+            color = "#FFD700";
+        } else if (this._combo >= 5) {
+            text = "Perfect!";
+            color = "#4FC3F7";
+        } else {
+            return; // 不足5次不显示
+        }
+
+        // 创建或更新连击文字
+        if (!this._comboText) {
+            this._comboText = new Laya.Text();
+            this._comboText.font = "Microsoft YaHei";
+            this._comboText.fontSize = 32;
+            this._comboText.bold = true;
+            this._comboText.stroke = 3;
+            this._comboText.strokeColor = "rgba(0,0,0,0.5)";
+            this._comboText.width = this.BASE_W;
+            this._comboText.align = "center";
+            this._comboText.pos(0, 580);
+            this.fxLayer.addChild(this._comboText);
+        }
+
+        this._comboText.text = text;
+        this._comboText.color = color;
+        this._comboText.alpha = 1;
+        this._comboText.scale(1.2, 1.2);
+
+        // 动画效果
+        Laya.Tween.to(this._comboText, { scaleX: 1, scaleY: 1 }, 150, Laya.Ease.backOut);
+
+        // 延迟淡出
+        Laya.timer.clear(this, this.hideComboText);
+        Laya.timer.once(800, this, this.hideComboText);
+    }
+
+    private hideComboText(): void {
+        if (this._comboText) {
+            Laya.Tween.to(this._comboText, { alpha: 0 }, 300);
         }
     }
 

@@ -6,6 +6,7 @@
 export class SoundManager {
     private static audioContext: AudioContext = null;
     private static enabled: boolean = true;
+    private static volume: number = 0.5; // 音量 0-1
 
     /**
      * 初始化音频上下文（需要在用户交互后调用）
@@ -18,14 +19,16 @@ export class SoundManager {
                 console.warn("AudioContext not supported", e);
             }
         }
-        // 从设置中读取音效开关状态
+        // 从设置中读取音效开关状态和音量
         const settings = Laya.LocalStorage.getItem("focus_planet_settings");
         if (settings) {
             try {
                 const parsed = JSON.parse(settings);
                 this.enabled = parsed.soundEnabled !== false;
+                this.volume = parsed.soundVolume !== undefined ? parsed.soundVolume : 0.5;
             } catch (e) {
                 this.enabled = true;
+                this.volume = 0.5;
             }
         }
     }
@@ -45,11 +48,25 @@ export class SoundManager {
     }
 
     /**
+     * 设置音量 (0-1)
+     */
+    public static setVolume(vol: number): void {
+        this.volume = Math.max(0, Math.min(1, vol));
+    }
+
+    /**
+     * 获取当前音量
+     */
+    public static getVolume(): number {
+        return this.volume;
+    }
+
+    /**
      * 播放点击正确音 - 清脆的"叮"声
      */
     public static playCorrect(): void {
         if (!this.enabled) return;
-        this.playTone(800, 0.1, 0.3, "sine");
+        this.playTone(800, 0.1, 0.3 * this.volume, "sine");
     }
 
     /**
@@ -57,7 +74,7 @@ export class SoundManager {
      */
     public static playWrong(): void {
         if (!this.enabled) return;
-        this.playTone(200, 0.15, 0.3, "square");
+        this.playTone(200, 0.15, 0.3 * this.volume, "square");
     }
 
     /**
@@ -65,7 +82,7 @@ export class SoundManager {
      */
     public static playComplete(): void {
         if (!this.enabled) return;
-        this.playMelody([523, 659, 784, 1047], 0.12, 0.4);
+        this.playMelody([523, 659, 784, 1047], 0.12, 0.4 * this.volume);
     }
 
     /**
@@ -73,7 +90,7 @@ export class SoundManager {
      */
     public static playClick(): void {
         if (!this.enabled) return;
-        this.playTone(600, 0.05, 0.15, "sine");
+        this.playTone(600, 0.05, 0.15 * this.volume, "sine");
     }
 
     /**

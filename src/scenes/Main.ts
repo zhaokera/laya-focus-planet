@@ -5,10 +5,10 @@ import { ChallengeSelectPanel } from "./ChallengeSelectPanel";
 import { GameSelectPanel } from "./GameSelectPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { SoundManager } from "./SoundManager";
+import { GuideOverlay, BeginnerGuide } from "../components/GuideOverlay";
 
 @regClass("84f89060-d701-4411-b5dc-ae6e4a05aed0", "../src/Main.ts")
 export class Main extends Laya.Scene {
-    private currentDifficulty: number = 3;
     private _isStarting: boolean = false;
 
     private readonly designW: number = 750;
@@ -24,23 +24,23 @@ export class Main extends Laya.Scene {
     private safeBottom: number = 0;
 
     private startBtnWrap: Laya.Sprite = null;
-    private startBtnShine: Laya.Sprite = null;
     private startBtnBaseX: number = 0;
     private startBtnBaseY: number = 0;
 
-    private frameTick: number = 0;
+    private readonly BUTTON_START_Y = 450;
 
     private readonly assetMap: Record<string, string[]> = {
         home_bg: this.makeCandidates("home_bg.png"),
-        title: this.makeCandidates("logo/title.png"),
-        btn_start: this.makeCandidates("btn/btn_start.png"),
-        btn_challenge: this.makeCandidates("btn/btn_challenge.png"),
-        btn_rank: this.makeCandidates("btn/btn_rank.png"),
-        btn_settings: this.makeCandidates("btn/btn_settings.png"),
-        icon_play: this.makeCandidates("icon/icon_play_color.png"),
-        icon_trophy: this.makeCandidates("icon/icon_trophy_color.png"),
-        icon_rank: this.makeCandidates("icon/icon_rank_color.png"),
-        icon_settings: this.makeCandidates("icon/icon_settings_color.png")
+        title: this.makeCandidates("logo/logo_focus_planet.png"),
+        btn_start: this.makeCandidates("btn/btn_base_green.png"),
+        btn_challenge: this.makeCandidates("btn/btn_base_orange.png"),
+        btn_rank: this.makeCandidates("btn/btn_base_purple.png"),
+        btn_settings: this.makeCandidates("btn/btn_base_blue.png"),
+        btn_achievement: this.makeCandidates("btn/btn_base_blue.png"),
+        icon_play: this.makeCandidates("icon/icon_play.png"),
+        icon_trophy: this.makeCandidates("icon/icon_trophy.png"),
+        icon_rank: this.makeCandidates("icon/icon_rank.png"),
+        icon_settings: this.makeCandidates("icon/icon_settings.png")
     };
 
     onAwake(): void {
@@ -79,7 +79,21 @@ export class Main extends Laya.Scene {
         this.drawBackground();
         this.drawMainUI();
 
-        this.timer.frameLoop(1, this, this.updateHomeFx);
+        // 首次进入显示新手引导
+        this.showGuideIfFirstTime();
+    }
+
+    private showGuideIfFirstTime(): void {
+        if (!BeginnerGuide.hasShownGuide()) {
+            // 延迟显示，等待UI渲染完成
+            Laya.timer.once(500, this, () => {
+                const guide = new GuideOverlay(() => {
+                    console.log("[Main] Guide completed");
+                });
+                guide.name = "GuideOverlay";
+                this.root.addChild(guide);
+            });
+        }
     }
 
     private drawBackground(): void {
@@ -104,7 +118,7 @@ export class Main extends Laya.Scene {
 
     private drawLogoAndRibbon(): void {
         const titleAspect = 500 / 333;
-        const buttonTop = 500 + this.safeTop * 0.30;
+        const buttonTop = this.BUTTON_START_Y;
         const topY = 56 + this.safeTop * 0.45;
         const minGapToButtons = 26;
         const maxTitleBottom = buttonTop - minGapToButtons;
@@ -127,18 +141,19 @@ export class Main extends Laya.Scene {
         const defs = [
             { label: "开始游戏", btn: "btn_start", icon: "icon_play", action: "start" },
             { label: "挑战模式", btn: "btn_challenge", icon: "icon_trophy", action: "challenge" },
+            { label: "专注力分析", btn: "btn_achievement", icon: "icon_trophy", action: "focusRadar" },
             { label: "排行榜", btn: "btn_rank", icon: "icon_rank", action: "rank" },
             { label: "设置", btn: "btn_settings", icon: "icon_settings", action: "settings" }
         ];
 
         const bw = this.designW * 0.68;
         const bh = bw * (256 / 1024);
-        const gap = 14;
+        const gap = 6; // 减小间距以容纳5个按钮
         const x = (this.designW - bw) * 0.5;
-        const y0 = 540 + this.safeTop * 0.22;
+        const y0 = this.BUTTON_START_Y;
         const iconSize = 56;
         const iconX = 48;
-        const fontSize = Math.max(32, Math.floor(bh * 0.34));
+        const fontSize = Math.max(26, Math.floor(bh * 0.28)); // 稍微减小字体
 
         defs.forEach((d, i) => {
             const y = y0 + i * (bh + gap);
@@ -157,7 +172,6 @@ export class Main extends Laya.Scene {
                 this.startBtnWrap = wrap;
                 this.startBtnBaseX = x;
                 this.startBtnBaseY = y;
-                this.startBtnShine = null;
             }
 
             const onRelease = () => {
@@ -178,6 +192,10 @@ export class Main extends Laya.Scene {
                     this.showGameSelect();
                 } else if (d.action === "challenge") {
                     this.showChallengeSelect();
+                } else if (d.action === "focusRadar") {
+                    this.showFocusRadar();
+                } else if (d.action === "achievement") {
+                    this.showAchievement();
                 } else if (d.action === "rank") {
                     this.showLeaderboard();
                 } else if (d.action === "settings") {
@@ -234,10 +252,6 @@ export class Main extends Laya.Scene {
         ];
     }
 
-    private updateHomeFx(): void {
-        this.frameTick++;
-    }
-
     private makeText(
         text: string,
         x: number,
@@ -265,15 +279,6 @@ export class Main extends Laya.Scene {
         t.stroke = stroke;
         t.strokeColor = strokeColor;
         return t;
-    }
-
-    private startGame(): void {
-        // 使用新的 GameScene 场景
-        const scene = new GameScene();
-        scene.name = "GameScene";
-        scene.currentDifficulty = this.currentDifficulty;
-        Laya.stage.addChild(scene);
-        this.destroy();
     }
 
     private showLeaderboard(): void {
@@ -308,8 +313,27 @@ export class Main extends Laya.Scene {
         this.destroy();
     }
 
+    private showFocusRadar(): void {
+        // 打开专注力分析面板
+        import("../panels/FocusRadarPanel").then((module) => {
+            const panel = new module.FocusRadarPanel();
+            panel.name = "FocusRadarPanel";
+            Laya.stage.addChild(panel);
+            this.destroy();
+        });
+    }
+
+    private showAchievement(): void {
+        // 打开成就中心
+        import("../panels/AchievementPanel").then((module) => {
+            const panel = new module.AchievementPanel();
+            panel.name = "AchievementPanel";
+            Laya.stage.addChild(panel);
+            this.destroy();
+        });
+    }
+
     onDestroy(): void {
-        this.timer.clear(this, this.updateHomeFx);
         Laya.stage.off(Event.RESIZE, this, this.refreshStageBg);
     }
 }

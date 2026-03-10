@@ -6,6 +6,9 @@
 const { regClass, Event } = Laya;
 
 import { GridCell } from "./GridCell";
+import { SoundManager } from "./SoundManager";
+import { VibrationManager } from "../managers/VibrationManager";
+import { FocusRadarManager } from "../managers/FocusRadarManager";
 import type { ChallengeType } from "./ChallengeSelectPanel";
 
 interface ChallengeState {
@@ -105,6 +108,7 @@ export class ChallengeScene extends Laya.Scene {
         this.createLayers();
         this.createBackground();
         this.createTitle();
+        this.createBackButton();
         this.createHudPanel();
         this.createGamePanelAndGrid();
         this.createPopup();
@@ -210,6 +214,31 @@ export class ChallengeScene extends Laya.Scene {
         this.titleText.align = "center";
         this.titleText.pos(0, 30);
         this.uiLayer.addChild(this.titleText);
+    }
+
+    private createBackButton(): void {
+        const btn = new Laya.Sprite();
+        btn.size(60, 32);
+        btn.pos(16, 28);
+        btn.mouseEnabled = true;
+
+        // 背景
+        btn.graphics.drawRoundRect(0, 0, 60, 32, 8, "rgba(255,255,255,0.1)", "rgba(255,255,255,0.2)", 1);
+
+        // 文字
+        const text = new Laya.Text();
+        text.text = "← 返回";
+        text.font = "Microsoft YaHei";
+        text.fontSize = 14;
+        text.color = "#FFFFFF";
+        text.width = 60;
+        text.height = 32;
+        text.align = "center";
+        text.valign = "middle";
+        btn.addChild(text);
+
+        btn.on(Event.CLICK, this, this.goBackToMain);
+        this.uiLayer.addChild(btn);
     }
 
     private getChallengeColor(): string {
@@ -519,6 +548,8 @@ export class ChallengeScene extends Laya.Scene {
         if (cell.isLocked()) return;
 
         cell.markCompleted();
+        SoundManager.playCorrect(); // 播放正确音
+        VibrationManager.light(); // 轻微震动
         this._currentNumber++;
 
         if (this._currentNumber > this._totalNumbers) {
@@ -533,6 +564,8 @@ export class ChallengeScene extends Laya.Scene {
         this._errors++;
         this.challengeState.totalErrors++;
         cell.showError();
+        SoundManager.playWrong(); // 播放错误音
+        VibrationManager.medium(); // 中等震动
 
         // 更新错误显示
         if (this.infoTexts["错误"]) {
@@ -572,6 +605,7 @@ export class ChallengeScene extends Laya.Scene {
 
     private onRoundComplete(): void {
         this.challengeState.roundsCompleted++;
+        SoundManager.playCorrect(); // 播放完成一轮音效
 
         // 更新轮数显示
         if (this.infoTexts["轮数"]) {
@@ -631,6 +665,10 @@ export class ChallengeScene extends Laya.Scene {
         Laya.timer.clear(this, this.updateCountdown);
 
         const elapsed = Laya.timer.currTimer - this.challengeState.startTime;
+
+        // 记录到专注力雷达图
+        FocusRadarManager.recordChallengeGame(elapsed, this.challengeState.totalErrors, 0);
+
         this.showResultPopup(elapsed);
     }
 
