@@ -9,6 +9,7 @@ import { GuideOverlay, BeginnerGuide } from "../components/GuideOverlay";
 import { FocusRadarManager } from "../managers/FocusRadarManager";
 import { AchievementManager } from "../managers/AchievementManager";
 import { StreakManager } from "../managers/StreakManager";
+import { SAFE_AREA_CONFIG, HOME_CONFIG } from "../config/UIConfig";
 
 @regClass("84f89060-d701-4411-b5dc-ae6e4a05aed0", "../src/Main.ts")
 export class Main extends Laya.Scene {
@@ -22,7 +23,7 @@ export class Main extends Laya.Scene {
     private layerBg: Laya.Sprite = null;
     private layerUI: Laya.Sprite = null;
 
-    private uiScale: number = 1;
+    private readonly uiScale: number = 1;
     private safeTop: number = 0;
     private safeBottom: number = 0;
 
@@ -30,7 +31,8 @@ export class Main extends Laya.Scene {
     private startBtnBaseX: number = 0;
     private startBtnBaseY: number = 0;
 
-    private readonly BUTTON_START_Y = 420;
+    // 使用配置文件中的常量
+    private readonly BUTTON_START_Y = HOME_CONFIG.BUTTONS.START_Y;
 
     private readonly assetMap: Record<string, string[]> = {
         home_bg: this.makeCandidates("home_bg.png"),
@@ -68,8 +70,13 @@ export class Main extends Laya.Scene {
         this.root.scale(this.uiScale, this.uiScale);
         this.root.pos((sw - this.designW * this.uiScale) / 2, (sh - this.designH * this.uiScale) / 2);
 
-        this.safeTop = (sh >= 2400 ? 74 : 44) / this.uiScale;
-        this.safeBottom = (sh >= 2400 ? 56 : 34) / this.uiScale;
+        // 使用配置文件中的安全区常量
+        this.safeTop = (sh >= SAFE_AREA_CONFIG.HEIGHT_THRESHOLD
+            ? SAFE_AREA_CONFIG.IPHONE_X.SAFE_TOP
+            : SAFE_AREA_CONFIG.NORMAL.SAFE_TOP) / this.uiScale;
+        this.safeBottom = (sh >= SAFE_AREA_CONFIG.HEIGHT_THRESHOLD
+            ? SAFE_AREA_CONFIG.IPHONE_X.SAFE_BOTTOM
+            : SAFE_AREA_CONFIG.NORMAL.SAFE_BOTTOM) / this.uiScale;
 
         this.addChild(this.root);
 
@@ -121,15 +128,15 @@ export class Main extends Laya.Scene {
     }
 
     private drawLogoAndRibbon(): void {
-        const titleAspect = 500 / 333;
+        const titleAspect = HOME_CONFIG.LOGO.ASPECT_RATIO;
         const buttonTop = this.BUTTON_START_Y;
-        const topY = 56 + this.safeTop * 0.45;
-        const minGapToButtons = 26;
+        const topY = HOME_CONFIG.LOGO.POSITION_Y_OFFSET + this.safeTop * 0.45;
+        const minGapToButtons = HOME_CONFIG.LOGO.GAP_TO_BUTTONS;
         const maxTitleBottom = buttonTop - minGapToButtons;
 
-        let titleW = this.designW * 0.72;
+        let titleW = this.designW * HOME_CONFIG.LOGO.WIDTH_RATIO;
         let titleH = titleW / titleAspect;
-        const maxHBySpace = Math.max(180, maxTitleBottom - topY);
+        const maxHBySpace = Math.max(HOME_CONFIG.LOGO.MIN_HEIGHT, maxTitleBottom - topY);
         if (titleH > maxHBySpace) {
             titleH = maxHBySpace;
             titleW = titleH * titleAspect;
@@ -155,10 +162,10 @@ export class Main extends Laya.Scene {
         // 计算连续打卡天数
         const streakDays = this.getStreakDays();
 
-        // 卡片位置
-        const cardY = 260;
-        const cardW = this.designW * 0.88;
-        const cardH = 75;
+        // 使用配置文件中的常量
+        const cardY = HOME_CONFIG.PLAYER_CARD.Y_POSITION;
+        const cardW = this.designW * HOME_CONFIG.PLAYER_CARD.WIDTH_RATIO;
+        const cardH = HOME_CONFIG.PLAYER_CARD.HEIGHT;
         const cardX = (this.designW - cardW) * 0.5;
 
         // 卡片容器
@@ -331,14 +338,15 @@ export class Main extends Laya.Scene {
             { label: "设置", btn: "btn_settings", icon: "icon_settings", action: "settings" }
         ];
 
-        const bw = this.designW * 0.68;
-        const bh = bw * (200 / 1024);  // 减小按钮高度
-        const gap = 4; // 减小按钮间距
+        // 使用配置文件中的常量
+        const bw = this.designW * HOME_CONFIG.BUTTONS.WIDTH_RATIO;
+        const bh = bw * HOME_CONFIG.BUTTONS.HEIGHT_RATIO;
+        const gap = HOME_CONFIG.BUTTONS.GAP;
         const x = (this.designW - bw) * 0.5;
         const y0 = this.BUTTON_START_Y;
-        const iconSize = 48;  // 减小图标尺寸
-        const iconX = 40;
-        const fontSize = Math.max(22, Math.floor(bh * 0.28)); // 稍微减小字体
+        const iconSize = HOME_CONFIG.BUTTONS.ICON_SIZE;
+        const iconX = HOME_CONFIG.BUTTONS.ICON_X;
+        const fontSize = Math.max(22, Math.floor(bh * HOME_CONFIG.BUTTONS.FONT_SIZE_RATIO));
 
         defs.forEach((d, i) => {
             const y = y0 + i * (bh + gap);
