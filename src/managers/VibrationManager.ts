@@ -3,8 +3,6 @@
  * 封装微信小游戏震动API，提供统一的震动反馈接口
  */
 
-import { SettingsManager } from "../panels/SettingsPanel";
-
 export class VibrationManager {
     private static _enabled: boolean = true;
 
@@ -13,8 +11,8 @@ export class VibrationManager {
      */
     public static init(): void {
         // 从设置中读取震动开关状态
-        const settings = SettingsManager.load();
-        this._enabled = settings.vibrationEnabled !== false;
+        const settings = this.loadSettings();
+        this._enabled = settings?.vibrationEnabled ?? true;
     }
 
     /**
@@ -36,17 +34,7 @@ export class VibrationManager {
      */
     public static light(): void {
         if (!this._enabled) return;
-
-        try {
-            // 微信小游戏震动API
-            if (typeof (window as any).wx !== "undefined" && (window as any).wx.vibrateShort) {
-                (window as any).wx.vibrateShort({
-                    type: "light"
-                });
-            }
-        } catch (e) {
-            // 忽略不支持的情况
-        }
+        this.vibrate("light");
     }
 
     /**
@@ -54,16 +42,7 @@ export class VibrationManager {
      */
     public static medium(): void {
         if (!this._enabled) return;
-
-        try {
-            if (typeof (window as any).wx !== "undefined" && (window as any).wx.vibrateShort) {
-                (window as any).wx.vibrateShort({
-                    type: "medium"
-                });
-            }
-        } catch (e) {
-            // 忽略不支持的情况
-        }
+        this.vibrate("medium");
     }
 
     /**
@@ -71,16 +50,7 @@ export class VibrationManager {
      */
     public static heavy(): void {
         if (!this._enabled) return;
-
-        try {
-            if (typeof (window as any).wx !== "undefined" && (window as any).wx.vibrateShort) {
-                (window as any).wx.vibrateShort({
-                    type: "heavy"
-                });
-            }
-        } catch (e) {
-            // 忽略不支持的情况
-        }
+        this.vibrate("heavy");
     }
 
     /**
@@ -88,13 +58,49 @@ export class VibrationManager {
      */
     public static long(): void {
         if (!this._enabled) return;
-
         try {
-            if (typeof (window as any).wx !== "undefined" && (window as any).wx.vibrateLong) {
+            if (this.isWechatAvailable() && (window as any).wx.vibrateLong) {
                 (window as any).wx.vibrateLong();
             }
         } catch (e) {
             // 忽略不支持的情况
         }
+    }
+
+    // ==================== 私有方法 ====================
+
+    /**
+     * 执行震动（提取重复逻辑）
+     */
+    private static vibrate(type: "light" | "medium" | "heavy"): void {
+        try {
+            if (this.isWechatAvailable() && (window as any).wx.vibrateShort) {
+                (window as any).wx.vibrateShort({ type });
+            }
+        } catch (e) {
+            // 忽略不支持的情况
+        }
+    }
+
+    /**
+     * 检查微信 API 是否可用
+     */
+    private static isWechatAvailable(): boolean {
+        return typeof (window as any).wx !== "undefined";
+    }
+
+    /**
+     * 加载设置（提取重复逻辑）
+     */
+    private static loadSettings(): { vibrationEnabled?: boolean } | null {
+        try {
+            const data = Laya.LocalStorage.getItem("focus_planet_settings");
+            if (data) {
+                return JSON.parse(data);
+            }
+        } catch (e) {
+            console.warn("[Vibration] 加载设置失败", e);
+        }
+        return null;
     }
 }

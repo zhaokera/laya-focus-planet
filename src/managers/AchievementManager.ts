@@ -3,7 +3,12 @@
  * 管理玩家成就解锁和统计数据
  */
 
-import { ACHIEVEMENTS, Achievement, PlayerStats } from "../data/achievements";
+import {
+    ACHIEVEMENTS,
+    Achievement,
+    PlayerStats,
+    ACHIEVEMENT_CHECKERS
+} from "../data/achievements";
 import { DailyTask, DAILY_TASK_TEMPLATES, getTodayStart, shouldResetTask, createDailyTask } from "../data/dailyTasks";
 
 export class AchievementManager {
@@ -214,6 +219,7 @@ export class AchievementManager {
 
     /**
      * 检查所有成就，返回新解锁的成就ID列表
+     * 使用映射表驱动替代 switch 语句
      */
     private static checkAchievements(): string[] {
         const newlyUnlocked: string[] = [];
@@ -221,39 +227,8 @@ export class AchievementManager {
         this.achievements.forEach(achievement => {
             if (achievement.unlocked) return;
 
-            let conditionMet = false;
-            switch (achievement.id) {
-                case "first_win":
-                    conditionMet = this.stats.totalGames >= 1;
-                    break;
-                case "speed_demon":
-                    conditionMet = this.stats.bestTime3x3 > 0 && this.stats.bestTime3x3 <= 10000;
-                    break;
-                case "perfectionist":
-                    conditionMet = this.stats.zeroErrorGames >= 1;
-                    break;
-                case "marathon":
-                    conditionMet = this.stats.totalGames >= 20;
-                    break;
-                case "memory_master":
-                    conditionMet = this.stats.memoryBestLevel >= 5;
-                    break;
-                case "challenge_king":
-                    conditionMet = this.stats.challengeCompleted >= 3;
-                    break;
-                case "streak_5":
-                    conditionMet = this.stats.maxCombo >= 5;
-                    break;
-                case "streak_10":
-                    conditionMet = this.stats.maxCombo >= 10;
-                    break;
-                case "grid_master_4":
-                    conditionMet = this.stats.bestTime4x4 > 0;
-                    break;
-                case "grid_master_5":
-                    conditionMet = this.stats.bestTime5x5 > 0;
-                    break;
-            }
+            // 使用映射表检查条件
+            const conditionMet = ACHIEVEMENT_CHECKERS[achievement.id]?.(this.stats) ?? false;
 
             if (conditionMet) {
                 achievement.unlocked = true;

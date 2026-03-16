@@ -116,31 +116,30 @@ export const ACHIEVEMENTS: Achievement[] = [
 ];
 
 /**
+ * 成就检查器函数类型
+ */
+export type AchievementChecker = (stats: PlayerStats) => boolean;
+
+/**
+ * 成就检查器映射表
+ * 使用映射表替代 switch 语句，便于扩展和维护
+ */
+export const ACHIEVEMENT_CHECKERS: Record<string, AchievementChecker> = {
+    first_win: stats => stats.totalGames >= 1,
+    speed_demon: stats => stats.bestTime3x3 > 0 && stats.bestTime3x3 <= 10000,
+    perfectionist: stats => stats.zeroErrorGames >= 1,
+    marathon: stats => stats.totalGames >= 20,
+    memory_master: stats => stats.memoryBestLevel >= 5,
+    challenge_king: stats => stats.challengeCompleted >= 3,
+    streak_5: stats => stats.maxCombo >= 5,
+    streak_10: stats => stats.maxCombo >= 10,
+    grid_master_4: stats => stats.bestTime4x4 > 0,
+    grid_master_5: stats => stats.bestTime5x5 > 0,
+};
+
+/**
  * 检查成就是否达成
  */
 export function checkAchievement(achievementId: string, stats: PlayerStats): boolean {
-    switch (achievementId) {
-        case "first_win":
-            return stats.totalGames >= 1;
-        case "speed_demon":
-            return stats.bestTime3x3 > 0 && stats.bestTime3x3 <= 10000;
-        case "perfectionist":
-            return stats.zeroErrorGames >= 1;
-        case "marathon":
-            return stats.totalGames >= 20;
-        case "memory_master":
-            return stats.memoryBestLevel >= 5;
-        case "challenge_king":
-            return stats.challengeCompleted >= 3;
-        case "streak_5":
-            return stats.maxCombo >= 5;
-        case "streak_10":
-            return stats.maxCombo >= 10;
-        case "grid_master_4":
-            return stats.bestTime4x4 > 0;
-        case "grid_master_5":
-            return stats.bestTime5x5 > 0;
-        default:
-            return false;
-    }
+    return ACHIEVEMENT_CHECKERS[achievementId]?.(stats) ?? false;
 }

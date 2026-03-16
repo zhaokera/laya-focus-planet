@@ -8,6 +8,7 @@ import { SoundManager } from "../managers/SoundManager";
 import { GuideOverlay, BeginnerGuide } from "../components/GuideOverlay";
 import { FocusRadarManager } from "../managers/FocusRadarManager";
 import { AchievementManager } from "../managers/AchievementManager";
+import { StreakManager } from "../managers/StreakManager";
 
 @regClass("84f89060-d701-4411-b5dc-ae6e4a05aed0", "../src/Main.ts")
 export class Main extends Laya.Scene {
@@ -308,49 +309,17 @@ export class Main extends Laya.Scene {
     }
 
     /**
-     * 获取连续打卡天数
+     * 获取连续打卡天数（委托给 StreakManager）
      */
     private getStreakDays(): number {
-        const streakKey = "focus_planet_streak";
-        const lastPlayKey = "focus_planet_last_play_date";
-
-        try {
-            const streak = parseInt(Laya.LocalStorage.getItem(streakKey) || "0");
-            const lastPlayDate = Laya.LocalStorage.getItem(lastPlayKey) || "";
-
-            const today = new Date().toISOString().split('T')[0];
-            const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-
-            if (lastPlayDate === today) {
-                // 今天已打过卡
-                return streak;
-            } else if (lastPlayDate === yesterday) {
-                // 昨天打过卡，今天还没
-                return streak; // 返回当前连续天数（今天打卡后会增加）
-            } else if (lastPlayDate === "") {
-                // 从未打过卡
-                return 0;
-            } else {
-                // 连续中断
-                return 0;
-            }
-        } catch (e) {
-            return 0;
-        }
+        return StreakManager.getDays();
     }
 
     /**
-     * 检查今天是否已训练
+     * 检查今天是否已训练（委托给 StreakManager）
      */
     private isTodayPlayed(): boolean {
-        const lastPlayKey = "focus_planet_last_play_date";
-        try {
-            const lastPlayDate = Laya.LocalStorage.getItem(lastPlayKey) || "";
-            const today = new Date().toISOString().split('T')[0];
-            return lastPlayDate === today;
-        } catch (e) {
-            return false;
-        }
+        return StreakManager.isTodayPlayed();
     }
 
     private drawButtons(): void {

@@ -17,6 +17,7 @@ import {
     calculateOverallScore,
     getFocusLevel
 } from "../data/focusRadar";
+import { StreakManager } from "./StreakManager";
 
 export class FocusRadarManager {
     private static readonly STATE_KEY = "focus_planet_radar_state";
@@ -26,6 +27,10 @@ export class FocusRadarManager {
     private static state: FocusRadarState | null = null;
     private static records: GameRecord[] = [];
     private static initialized: boolean = false;
+
+    // 雷达图缓存
+    private static radarCache: FocusRadarData | null = null;
+    private static cacheDirty: boolean = true;
 
     /**
      * 初始化管理器
@@ -225,7 +230,7 @@ export class FocusRadarManager {
         }
 
         // 更新连续打卡
-        this.updateStreak();
+        StreakManager.recordPlay();
 
         this.saveRecords();
     }
@@ -295,6 +300,9 @@ export class FocusRadarManager {
 
         this.state.lastUpdated = Date.now();
 
+        // 标记缓存为脏数据
+        this.cacheDirty = true;
+
         this.saveState();
     }
 
@@ -309,18 +317,29 @@ export class FocusRadarManager {
     }
 
     /**
-     * 获取雷达图数据
+     * 获取雷达图数据（使用缓存）
      */
     public static getRadarData(): FocusRadarData {
         this.init();
 
-        return {
+        // 如果缓存有效，直接返回
+        if (!this.cacheDirty && this.radarCache) {
+            return this.radarCache;
+        }
+
+        const radarData: FocusRadarData = {
             speed: this.state?.speed || 0,
             accuracy: this.state?.accuracy || 0,
             memory: this.state?.memory || 0,
             stability: this.state?.stability || 0,
             endurance: this.state?.endurance || 0
         };
+
+        // 更新缓存
+        this.radarCache = radarData;
+        this.cacheDirty = false;
+
+        return radarData;
     }
 
     /**
@@ -423,42 +442,16 @@ export class FocusRadarManager {
     }
 
     /**
-     * 获取连续打卡天数
+     * 获取连续打卡天数（委托给 StreakManager）
      */
     public static getStreakDays(): number {
-        const streakKey = "focus_planet_streak";
-        const lastPlayKey = "focus_planet_last_play_date";
-
-        try {
-            const streak = parseInt(Laya.LocalStorage.getItem(streakKey) || "0");
-            const lastPlayDate = Laya.LocalStorage.getItem(lastPlayKey) || "";
-
-            const today = new Date().toISOString().split('T')[0];
-            const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-
-            if (lastPlayDate === today || lastPlayDate === yesterday) {
-                return streak;
-            } else if (lastPlayDate === "") {
-                return 0;
-            } else {
-                return 0;
-            }
-        } catch (e) {
-            return 0;
-        }
+        return StreakManager.getDays();
     }
 
     /**
-     * 检查今天是否已训练
+     * 检查今天是否已训练（委托给 StreakManager）
      */
     public static isTodayPlayed(): boolean {
-        const lastPlayKey = "focus_planet_last_play_date";
-        try {
-            const lastPlayDate = Laya.LocalStorage.getItem(lastPlayKey) || "";
-            const today = new Date().toISOString().split('T')[0];
-            return lastPlayDate === today;
-        } catch (e) {
-            return false;
-        }
+        return StreakManager.isTodayPlayed();
     }
 }
