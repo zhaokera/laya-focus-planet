@@ -7,6 +7,7 @@
 const { Event } = Laya;
 
 import { Main } from "./Main";
+import { RankItemPool, RankItemData } from "../utils/RankItemPool";
 
 // 游戏类型定义
 export type LeaderboardGameType = "schulte" | "memory";
@@ -89,8 +90,13 @@ export class LeaderboardPanel extends Laya.Scene {
     private gameTypeBtns: Laya.Sprite[] = [];
     private tabBtns: Laya.Sprite[] = [];
 
+    // 列表项对象池
+    private rankItemPool: RankItemPool;
+
     constructor() {
         super();
+        // 初始化列表项对象池
+        this.rankItemPool = new RankItemPool(10, 30);
     }
 
     onAwake(): void {
@@ -583,6 +589,13 @@ export class LeaderboardPanel extends Laya.Scene {
     }
 
     private refreshList(): void {
+        // 先释放之前的项回池
+        const oldItems = (this.listContainer as any).__rankItems as Laya.Sprite[];
+        if (oldItems && oldItems.length > 0) {
+            this.rankItemPool.releaseAll(oldItems);
+            (this.listContainer as any).__rankItems = null;
+        }
+
         this.listContainer.removeChildren();
         this.scrollOffset = 0;
         this.listContainer.y = 0;
@@ -598,6 +611,9 @@ export class LeaderboardPanel extends Laya.Scene {
             return;
         }
 
+        // 用于追踪已创建的项，便于后续释放
+        const items: Laya.Sprite[] = [];
+
         records.forEach((record, index) => {
             const item = this.createRankItem(record, index, listW, itemH);
             item.pos(0, index * itemH);
@@ -605,6 +621,7 @@ export class LeaderboardPanel extends Laya.Scene {
             // 初始位置向下偏移，用于上滑动画
             item.y = index * itemH + 20;
             this.listContainer.addChild(item);
+            items.push(item);
 
             // 依次淡入 + 上滑动画
             Laya.Tween.to(item, { alpha: 1, y: index * itemH }, 400, Laya.Ease.easeOut, null, index * 50);
@@ -613,165 +630,20 @@ export class LeaderboardPanel extends Laya.Scene {
         const totalHeight = records.length * itemH;
         this.maxScroll = Math.max(0, totalHeight - listH);
         this.listContainer.height = totalHeight;
+
+        // 存储-items到容器，便于销毁时释放回池
+        (this.listContainer as any).__rankItems = items;
     }
 
     private createRankItem(data: RankRecord, index: number, w: number, h: number): Laya.Sprite {
-        const item = new Laya.Sprite();
-        item.size(w, h);
+        const itemData: RankItemData = {
+            data: data,
+            index: index,
+            width: w,
+            height: h
+        };
 
-        const isTop3 = data.rank <= 3;
-        const rankType = data.rank === 1 ? "gold" : data.rank === 2 ? "silver" : data.rank === 3 ? "bronze" : "normal";
-
-        // 绘制背景
-        const g = item.graphics;
-        g.clear();
-
-        if (isTop3) {
-            // 前三名 - 渐变背景（用多段矩形模拟）
-            const bgColor = rankType === "gold"
-                ? { r: 255, g: 215, b: 0 }
-                : rankType === "silver"
-                    ? { r: 192, g: 192, b: 192 }
-                    : { r: 205, g: 127, b: 50 };
-
-            const borderColor = rankType === "gold"
-                ? "rgba(255,215,0,0.4)"
-                : rankType === "silver"
-                    ? "rgba(192,192,192,0.4)"
-                    : "rgba(205,127,50,0.4)";
-
-            // 绘制渐变背景
-            const steps = 6;
-            for (let i = 0; i < steps; i++) {
-                const ratio = i / steps;
-                const nextRatio = (i + 1) / steps;
-                const x1 = w * ratio;
-                const x2 = w * nextRatio;
-                const stepW = x2 - x1;
-
-                const alpha = 0.08 + ratio * 0.08;
-                const color = `rgba(${bgColor.r},${bgColor.g},${bgColor.b},${alpha})`;
-                g.drawRect(x1, 0, stepW + 1, h, color);
-            }
-
-            // 边框（带发光效果 - 画两层）
-            g.drawRoundRect(0, 0, w, h, 10, null, `rgba(${bgColor.r},${bgColor.g},${bgColor.b},0.15)`, 3);
-            g.drawRoundRect(0, 0, w, h, 10, null, borderColor, 1);
-        } else {
-            // 普通项 - 更紧凑的背景
-            g.drawRoundRect(0, 0, w, h, 10, "rgba(255,255,255,0.02)", "rgba(255,255,255,0.04)", 1);
-        }
-
-        // 排名徽章
-        const badgeSize = isTop3 ? 32 : 26;
-        const badgeX = 12;
-        const badgeY = (h - badgeSize) / 2;
-
-        if (isTop3) {
-            const badgeColor = rankType === "gold"
-                ? this.COLORS.gold
-                : rankType === "silver"
-                    ? this.COLORS.silver
-                    : this.COLORS.bronze;
-
-            // 外发光效果 - 画一圈半透明的光晕
-            const glowColor = rankType === "gold"
-                ? "rgba(255,215,0,0.25)"
-                : rankType === "silver"
-                    ? "rgba(192,192,192,0.25)"
-                    : "rgba(205,127,50,0.25)";
-            g.drawCircle(badgeX + badgeSize / 2, badgeY + badgeSize / 2, badgeSize / 2 + 4, glowColor);
-
-            // 徽章背景 - 圆形渐变效果（用两层模拟）
-            const innerColor = rankType === "gold"
-                ? "#FFE066"
-                : rankType === "silver"
-                    ? "#E0E0E0"
-                    : "#E5A060";
-            g.drawCircle(badgeX + badgeSize / 2, badgeY + badgeSize / 2, badgeSize / 2, badgeColor);
-            // 高光
-            g.drawCircle(badgeX + badgeSize / 2 - 2, badgeY + badgeSize / 2 - 2, badgeSize / 4, innerColor);
-
-            // 排名数字
-            const rankNum = new Laya.Text();
-            rankNum.text = String(data.rank);
-            rankNum.font = "Microsoft YaHei";
-            rankNum.fontSize = 14;
-            rankNum.bold = true;
-            rankNum.color = "#FFFFFF";
-            rankNum.width = badgeSize;
-            rankNum.height = badgeSize;
-            rankNum.align = "center";
-            rankNum.valign = "middle";
-            rankNum.pos(badgeX, badgeY);
-            item.addChild(rankNum);
-        } else {
-            // 普通排名 - 圆形灰底
-            g.drawCircle(badgeX + badgeSize / 2, badgeY + badgeSize / 2, badgeSize / 2, "rgba(255,255,255,0.08)");
-
-            const rankNum = new Laya.Text();
-            rankNum.text = String(data.rank);
-            rankNum.font = "Microsoft YaHei";
-            rankNum.fontSize = 12;
-            rankNum.color = this.COLORS.textMuted;
-            rankNum.width = badgeSize;
-            rankNum.height = badgeSize;
-            rankNum.align = "center";
-            rankNum.valign = "middle";
-            rankNum.pos(badgeX, badgeY);
-            item.addChild(rankNum);
-        }
-
-        // 玩家名称
-        const nameText = new Laya.Text();
-        nameText.text = data.name;
-        nameText.font = "Microsoft YaHei";
-        nameText.fontSize = isTop3 ? 14 : 13;
-        nameText.bold = isTop3;
-        nameText.color = isTop3 ? this.COLORS[rankType as keyof typeof this.COLORS] || this.COLORS.normal : this.COLORS.normal;
-        nameText.pos(52, isTop3 ? 8 : 6);
-        item.addChild(nameText);
-
-        // 根据游戏类型显示不同的信息
-        const statsY = isTop3 ? 24 : 22;
-
-        if (this.currentGameType === "schulte") {
-            // 舒尔特方格：用时 + 分数
-            const timeText = new Laya.Text();
-            timeText.text = data.time;
-            timeText.font = "Microsoft YaHei";
-            timeText.fontSize = 11;
-            timeText.color = this.COLORS.accent;
-            timeText.pos(52, statsY);
-            item.addChild(timeText);
-
-            const scoreText = new Laya.Text();
-            scoreText.text = data.score + "分";
-            scoreText.font = "Microsoft YaHei";
-            scoreText.fontSize = 11;
-            scoreText.color = this.COLORS.textMuted;
-            scoreText.pos(140, statsY);
-            item.addChild(scoreText);
-        } else {
-            // 记忆闪现：关卡 + 分数
-            const levelText = new Laya.Text();
-            levelText.text = `关卡 ${data.level}`;
-            levelText.font = "Microsoft YaHei";
-            levelText.fontSize = 11;
-            levelText.color = this.COLORS.accent;
-            levelText.pos(52, statsY);
-            item.addChild(levelText);
-
-            const scoreText = new Laya.Text();
-            scoreText.text = data.score + "分";
-            scoreText.font = "Microsoft YaHei";
-            scoreText.fontSize = 11;
-            scoreText.color = this.COLORS.textMuted;
-            scoreText.pos(130, statsY);
-            item.addChild(scoreText);
-        }
-
-        return item;
+        return this.rankItemPool.acquire(itemData);
     }
 
     private showEmptyState(): void {
@@ -1114,6 +986,16 @@ export class LeaderboardPanel extends Laya.Scene {
             this.listMask.off(Event.MOUSE_UP, this, this.onScrollEnd);
             this.listMask.off(Event.MOUSE_OUT, this, this.onScrollEnd);
         }
+
+        // 释放列表项回池
+        const items = (this.listContainer as any).__rankItems as Laya.Sprite[];
+        if (items && items.length > 0) {
+            this.rankItemPool.releaseAll(items);
+            (this.listContainer as any).__rankItems = null;
+        }
+
+        // 清空池
+        this.rankItemPool.clear();
 
         super.destroy();
     }

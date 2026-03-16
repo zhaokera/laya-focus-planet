@@ -51,6 +51,8 @@ export class RankItemPool {
         item.pos(0, 0);
         item.scale(1, 1);
         item.alpha = 1;
+        // 清除存储的数据引用
+        delete (item as any).__rankData;
 
         this.pool.push(item);
     }
